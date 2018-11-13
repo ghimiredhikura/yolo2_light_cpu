@@ -637,9 +637,6 @@ void run_detector(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-#ifdef _DEBUG
-    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-#endif
     int i;
     for (i = 0; i < argc; ++i) {
         if (!argv[i]) continue;
@@ -650,18 +647,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
         return 0;
     }
-    gpu_index = find_int_arg(argc, argv, "-i", 0);  //  gpu_index = 0;
-
-#ifndef GPU
     gpu_index = -1;
-#else
-    if (gpu_index >= 0) {
-        cuda_set_device(gpu_index);
-    }
-#endif
-#ifdef OPENCL
-    ocl_initialize();
-#endif
+
     run_detector(argc, argv);
-    return 0;
+
+	return 0;
 }

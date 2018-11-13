@@ -1,0 +1,213 @@
+﻿  yolov2_forward_network_quantized.c
+f:\github\yolo2_light_cpu\src\additionally.h(75): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(76): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(74): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(85): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(86): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(88): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(89): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(90): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(91): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(92): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(95): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(96): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(97): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(102): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(103): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(274): warning C4133: 'function': incompatible types - from 'int16_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(276): warning C4133: 'function': incompatible types - from 'int16_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(286): warning C4133: 'function': incompatible types - from 'int16_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(288): warning C4133: 'function': incompatible types - from 'int16_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(254): warning C4101: 'div256': unreferenced local variable
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(336): warning C4133: 'function': incompatible types - from 'int32_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(338): warning C4133: 'function': incompatible types - from 'int32_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(343): warning C4133: 'function': incompatible types - from 'int32_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(345): warning C4133: 'function': incompatible types - from 'int32_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(355): warning C4133: 'function': incompatible types - from 'int32_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(357): warning C4133: 'function': incompatible types - from 'int32_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(362): warning C4133: 'function': incompatible types - from 'int32_t *' to 'const __m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(364): warning C4133: 'function': incompatible types - from 'int32_t *' to '__m256i *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(554): warning C4133: '=': incompatible types - from 'int *' to 'int8_t *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(558): warning C4244: 'initializing': conversion from 'float' to 'int16_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(532): warning C4101: 'f': unreferenced local variable
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(757): warning C4244: '=': conversion from 'float' to 'conv_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(764): warning C4244: '+=': conversion from 'float' to 'conv_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(641): warning C4101: 'f': unreferenced local variable
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1042): warning C4013: 'forward_maxpool_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1046): warning C4013: 'forward_route_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1050): warning C4013: 'forward_reorg_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1054): warning C4013: 'forward_upsample_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1058): warning C4013: 'forward_shortcut_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1062): warning C4013: 'forward_yolo_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1066): warning C4013: 'forward_region_layer_cpu' undefined; assuming extern returning int
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1030): warning C4101: 'k': unreferenced local variable
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1150): warning C4244: 'initializing': conversion from 'double' to 'int16_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1095): warning C4101: 'k': unreferenced local variable
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1201): warning C4244: 'initializing': conversion from 'float' to 'int16_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1334): warning C4244: '+=': conversion from 'float' to 'uint64_t', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1370): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1381): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1296): warning C4244: 'initializing': conversion from 'const float' to 'const int', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1385): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1429): warning C4267: 'function': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1444): warning C4244: 'function': conversion from 'float' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(1418): warning C4101: 'k': unreferenced local variable
+  yolov2_forward_network.c
+f:\github\yolo2_light_cpu\src\additionally.h(75): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(76): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(74): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(85): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(86): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(88): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(89): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(90): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(91): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(92): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(95): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(96): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(97): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(102): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(103): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network.c(24): warning C4133: 'function': incompatible types - from 'float *' to 'uint32_t *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network.c(24): warning C4133: 'function': incompatible types - from 'char *' to 'uint32_t *'
+f:\github\yolo2_light_cpu\src\yolov2_forward_network.c(24): warning C4267: 'function': conversion from 'size_t' to 'const int', possible loss of data
+f:\github\yolo2_light_cpu\src\yolov2_forward_network.c(127): warning C4267: 'function': conversion from 'size_t' to 'int', possible loss of data
+  main.c
+f:\github\yolo2_light_cpu\src\additionally.h(75): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(76): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(74): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(85): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(86): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(88): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(89): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(90): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(91): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(92): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(95): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(96): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(97): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(102): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(103): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(109): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(135): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(136): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(137): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(138): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\main.c(213): warning C4305: '=': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\main.c(176): warning C4305: 'initializing': truncation from 'double' to 'float'
+  box.c
+f:\github\yolo2_light_cpu\src\box.c(104): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(139): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(140): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(141): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(142): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(144): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(161): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(162): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(163): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(164): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(166): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(186): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(187): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(188): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(189): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(191): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\box.c(226): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(227): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(228): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(229): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(355): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(356): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(365): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\box.c(366): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+  additionally.c
+f:\github\yolo2_light_cpu\src\additionally.h(75): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(76): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(74): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(85): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(86): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(88): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(89): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(90): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(91): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(92): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(95): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(96): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(97): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(102): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.h(103): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(85): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(119): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(132): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(192): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(201): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(206): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(349): warning C4244: 'return': conversion from 'unsigned long' to 'uint8_t', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(408): warning C4068: unknown pragma
+f:\github\yolo2_light_cpu\src\additionally.c(411): warning C4068: unknown pragma
+f:\github\yolo2_light_cpu\src\additionally.c(430): warning C4133: 'function': incompatible types - from 'uint32_t *' to 'const unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(430): warning C4133: 'function': incompatible types - from 'uint32_t *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(486): warning C4244: 'return': conversion from '__int64' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(656): warning C4133: 'function': incompatible types - from 'float *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(670): warning C4133: 'function': incompatible types - from 'float *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(684): warning C4133: 'function': incompatible types - from 'float *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(698): warning C4133: 'function': incompatible types - from 'float *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(712): warning C4133: 'function': incompatible types - from 'float *' to 'unsigned char *const '
+f:\github\yolo2_light_cpu\src\additionally.c(644): warning C4133: 'initializing': incompatible types - from 'unsigned char *' to 'uint16_t *'
+f:\github\yolo2_light_cpu\src\additionally.c(752): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(865): warning C4244: 'return': conversion from 'unsigned __int64' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1319): warning C4267: 'function': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1337): warning C4267: 'function': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1406): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1482): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1511): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1522): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1550): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(1560): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(2554): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(2415): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(2751): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(2902): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(2903): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3038): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3046): warning C4244: 'return': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3238): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3259): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3266): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3279): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3316): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3325): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3332): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3418): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3512): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3513): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3514): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3540): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3541): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3542): warning C4305: 'function': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(3523): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3532): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3572): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3582): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3947): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3948): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3967): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(3968): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(4206): warning C4244: 'function': conversion from 'time_t' to 'unsigned int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(4225): warning C4305: 'initializing': truncation from 'double' to 'const float'
+f:\github\yolo2_light_cpu\src\additionally.c(4226): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(4567): warning C4244: 'function': conversion from 'time_t' to 'unsigned int', possible loss of data
+f:\github\yolo2_light_cpu\src\additionally.c(4590): warning C4305: 'initializing': truncation from 'double' to 'const float'
+f:\github\yolo2_light_cpu\src\additionally.c(4591): warning C4305: 'initializing': truncation from 'double' to 'float'
+f:\github\yolo2_light_cpu\src\additionally.c(4549): warning C4101: 'j': unreferenced local variable
+  Generating Code...
+f:\github\yolo2_light_cpu\src\additionally.c(465): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\additionally.c(547): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\additionally.c(752): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\additionally.c(655): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\additionally.c(927): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\additionally.c(803): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(267): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+f:\github\yolo2_light_cpu\src\yolov2_forward_network_quantized.c(328): warning C4752: found Intel(R) Advanced Vector Extensions; consider using /arch:AVX
+  yolo_cpu.vcxproj -> F:\GitHub\yolo2_light_cpu\bin\yolo_cpu.exe
+  yolo_cpu.vcxproj -> bin\yolo_cpu.pdb (Partial PDB)
