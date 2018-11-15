@@ -14,20 +14,6 @@
 #include <limits.h>
 #include <stdint.h>
 
-#ifdef CUDNN
-#include "cudnn.h"
-#endif
-
-#ifdef GPU
-#include "cuda_runtime.h"
-#include "curand.h"
-#include "cublas_v2.h"
-#endif
-
-#ifdef OPENCL
-#include "CL/cl.h"
-#endif
-
 #ifdef OPENCV
 #include <opencv2/core/fast_math.hpp>
 #include "opencv2/highgui/highgui_c.h"
@@ -184,46 +170,6 @@ extern "C" {
     // float32 to bit-1 and align weights for ALL layers
     void calculate_binary_weights(struct network net);
 
-    // -------------- XNOR-net GPU ------------
-
-#ifdef GPU
-    void swap_binary(convolutional_layer *l);
-
-    void binarize_weights_gpu(float *weights, int n, int size, float *binary);
-
-    void binarize_gpu(float *x, int n, float *binary);
-
-    void im2col_align_ongpu(float *im,
-        int channels, int height, int width,
-        int ksize, int stride, int pad, float *data_col, int bit_align);
-
-    void im2col_align_bin_ongpu(float *im,
-        int channels, int height, int width,
-        int ksize, int stride, int pad, float *data_col, int bit_align);
-
-    void float_to_bit_gpu(float *src, unsigned char *dst, size_t size);
-
-    void transpose_bin_gpu(unsigned char *A, unsigned char *B, const int n, const int m,
-        const int lda, const int ldb, const int block_size);
-
-    void fill_int8_gpu(unsigned char *src, unsigned char val, size_t size);
-
-    //void gemm_nn_custom_bin_mean_transposed_gpu(int M, int N, int K,
-    //    unsigned char *A, int lda,
-    //    unsigned char *B, int ldb,
-    //    float *C, int ldc, float *mean_arr);
-
-    void gemm_nn_custom_bin_mean_transposed_gpu(int M, int N, int K,
-        unsigned char *A, int lda,
-        unsigned char *B, int ldb,
-        float *C, int ldc, float *mean_arr, float *bias);
-
-    void gemm_nn_custom_bin_mean_transposed_sequentially_gpu(int M, int N, int K,
-        unsigned char *A, int lda,
-        unsigned char *B, int ldb,
-        float *C, int ldc, float *mean_arr);
-
-#endif // GPU
 
     // -------------- blas.h --------------
 
@@ -611,85 +557,6 @@ extern "C" {
         float *binary_input;
 
         size_t workspace_size;
-
-#ifdef GPU
-        float *z_gpu;
-        float *r_gpu;
-        float *h_gpu;
-
-        int *indexes_gpu;
-        float * prev_state_gpu;
-        float * forgot_state_gpu;
-        float * forgot_delta_gpu;
-        float * state_gpu;
-        float * state_delta_gpu;
-        float * gate_gpu;
-        float * gate_delta_gpu;
-        float * save_gpu;
-        float * save_delta_gpu;
-        float * concat_gpu;
-        float * concat_delta_gpu;
-
-        float *binary_input_gpu;
-        float *binary_weights_gpu;
-
-        float * mean_gpu;
-        float * variance_gpu;
-
-        float * rolling_mean_gpu;
-        float * rolling_variance_gpu;
-
-        float * variance_delta_gpu;
-        float * mean_delta_gpu;
-
-        float * col_image_gpu;
-
-        float * x_gpu;
-        float * x_norm_gpu;
-        float * weights_gpu;
-        //float * weight_updates_gpu;
-        int8_t * weights_int8_gpu;
-        int8_t * weights_int8_int8x4_gpu;
-
-        float * biases_gpu;
-        //float * bias_updates_gpu;
-        float * biases_quant_gpu;
-
-        float * scales_gpu;
-        //float * scale_updates_gpu;
-
-        float * output_gpu;
-        int8_t *output_gpu_int8;
-        float * delta_gpu;
-        float * rand_gpu;
-        float * squared_gpu;
-        float * norms_gpu;
-#ifdef CUDNN
-        cudnnTensorDescriptor_t biasTensorDesc;
-        cudnnActivationDescriptor_t activationDesc;
-        cudnnTensorDescriptor_t srcTensorDesc, dstTensorDesc;
-        //cudnnTensorDescriptor_t dsrcTensorDesc, ddstTensorDesc;
-        cudnnFilterDescriptor_t weightDesc;
-        //cudnnFilterDescriptor_t dweightDesc;
-        cudnnConvolutionDescriptor_t convDesc;
-        cudnnConvolutionFwdAlgo_t fw_algo;
-        //cudnnConvolutionBwdDataAlgo_t bd_algo;
-        //cudnnConvolutionBwdFilterAlgo_t bf_algo;
-        cudnnPoolingDescriptor_t poolingDesc;
-#endif
-#endif
-
-#ifdef OPENCL
-        cl_mem weights_ocl;
-        cl_mem biases_ocl;
-        cl_mem scales_ocl;
-        cl_mem rolling_mean_ocl;
-        cl_mem rolling_variance_ocl;
-
-        cl_mem output_ocl;
-        cl_mem indexes_ocl;
-        cl_mem x_ocl;
-#endif
     };
 
     typedef layer local_layer;
@@ -756,17 +623,6 @@ extern "C" {
         int gpu_index;
         tree *hierarchy;
         int do_input_calibration;
-
-#ifdef GPU
-        float *input_state_gpu;
-
-        float **input_gpu;
-        float **truth_gpu;
-#endif
-
-#ifdef OPENCL
-        cl_mem workspace_ocl;
-#endif
     } network;
 
     typedef struct network_state {
@@ -778,28 +634,11 @@ extern "C" {
         int train;
         int index;
         network net;
-#ifdef OPENCL
-        cl_mem input_ocl;
-        cl_mem workspace_ocl;
-#endif
     } network_state;
 
 
     // network.c
     network make_network(int n);
-
-
-    // network.c
-#ifdef GPU
-#ifdef CUDNN
-    void cudnn_convolutional_setup(layer *l);
-    void cuda_set_device(int n);
-#endif
-#endif
-
-#ifdef OPENCL
-    bool ocl_initialize();
-#endif
 
     // network.c
     void set_batch_network(network *net, int b);
@@ -956,25 +795,6 @@ extern "C" {
     void free_detections(detection *dets, int n);
 
     // -------------- yolov2_forward_network_gpu.c --------------------
-
-#ifdef GPU
-    // detect on GPU: yolov2_forward_network_gpu.cu
-    float *network_predict_gpu_cudnn(network net, float *input);
-
-    // detect on GPU: yolov2_forward_network_gpu.cu - quantized INT8x4
-    float *network_predict_gpu_cudnn_quantized(network net, float *input);
-
-    // // init weights and cuDNN for quantized IINT8x4
-    void init_gpu_int8x4(network net);
-#endif
-
-    // -------------- yolov2_forward_network_ocl.c --------------------
-
-#ifdef OPENCL
-    // detect using OpenCL: yolov2_forward_network_gpu.cpp
-    float *network_predict_opencl(network net, float *input);
-#endif
-
 
     // -------------- gettimeofday for Windows--------------------
 

@@ -1,14 +1,6 @@
 #include "additionally.h"
 #include "gpu.h"
 
-#ifdef OPENCL
-#include "ocl.h"
-#endif
-
-#ifdef CUDNN
-#pragma comment(lib, "cudnn.lib")
-#endif
-
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -89,17 +81,6 @@ void yolov2_fuse_conv_batchnorm(network net)
                 }
 
                 l->batch_normalize = 0;
-#ifdef GPU
-                if (gpu_index >= 0) {
-                    push_convolutional_layer(*l);
-                }
-#endif
-
-#ifdef OPENCL
-                //if (gpu_index >= 0) {
-                ocl_push_convolutional_layer(*l);
-                //}
-#endif
             }
         }
         else {
@@ -219,25 +200,6 @@ void binary_align_weights(convolutional_layer *l)
     l->mean_arr = calloc(l->n, sizeof(float));
     get_mean_array(align_weights, align_weights_size, l->n, l->mean_arr);
 
-#ifdef GPU
-    cudaError_t status;
-    l->align_workspace_size = l->bit_align * l->size * l->size * l->c;
-    status = cudaMalloc((void **)&l->align_workspace_gpu, l->align_workspace_size * sizeof(float));
-    status = cudaMalloc((void **)&l->transposed_align_workspace_gpu, l->align_workspace_size * sizeof(float));
-    check_error(status);
-
-    //l->align_bit_weights_gpu = cuda_make_array(l->align_bit_weights, l->align_bit_weights_size * sizeof(char)/sizeof(float));
-    status = cudaMalloc((void **)&l->align_bit_weights_gpu, l->align_bit_weights_size);
-    check_error(status);
-    status = cudaMemcpy(l->align_bit_weights_gpu, l->align_bit_weights, l->align_bit_weights_size, cudaMemcpyHostToDevice);
-    check_error(status);
-    status = cudaMemcpy(l->binary_weights_gpu, l->binary_weights, m*k * sizeof(float), cudaMemcpyHostToDevice);
-    check_error(status);
-
-    l->mean_arr_gpu = cuda_make_array(l->mean_arr, l->n);
-    cudaDeviceSynchronize();
-#endif // GPU
-
     free(align_weights);
 }
 
@@ -278,72 +240,6 @@ static inline unsigned char get_bit(unsigned char const*const src, size_t index)
     unsigned char val = (src[src_i] & (1 << src_shift)) > 0;
     return val;
 }
-
-/*
-static inline unsigned char reverse_byte_1(char a)
-{
-    return ((a & 0x1) << 7) | ((a & 0x2) << 5) |
-        ((a & 0x4) << 3) | ((a & 0x8) << 1) |
-        ((a & 0x10) >> 1) | ((a & 0x20) >> 3) |
-        ((a & 0x40) >> 5) | ((a & 0x80) >> 7);
-}
-
-static inline unsigned char reverse_byte(unsigned char a)
-{
-    return ((a * 0x0802LU & 0x22110LU) | (a * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
-}
-
-static unsigned char lookup[16] = {
-    0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
-    0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf, };
-
-static inline unsigned char reverse_byte_3(unsigned char n) {
-    // Reverse the top and bottom nibble then swap them.
-    return (lookup[n & 0b1111] << 4) | lookup[n >> 4];
-}
-
-
-static inline void transpose8rS32_reversed_diagonale(unsigned char* A, int m, int n, unsigned char* B)
-{
-    unsigned x, y, t;
-
-    // Load the array and pack it into x and y.
-    x = (A[0] << 24) | (A[m] << 16) | (A[2 * m] << 8) | A[3 * m];
-    y = (A[4 * m] << 24) | (A[5 * m] << 16) | (A[6 * m] << 8) | A[7 * m];
-
-    t = (x ^ (x >> 7)) & 0x00AA00AA;  x = x ^ t ^ (t << 7);
-    t = (y ^ (y >> 7)) & 0x00AA00AA;  y = y ^ t ^ (t << 7);
-
-    t = (x ^ (x >> 14)) & 0x0000CCCC;  x = x ^ t ^ (t << 14);
-    t = (y ^ (y >> 14)) & 0x0000CCCC;  y = y ^ t ^ (t << 14);
-
-    t = (x & 0xF0F0F0F0) | ((y >> 4) & 0x0F0F0F0F);
-    y = ((x << 4) & 0xF0F0F0F0) | (y & 0x0F0F0F0F);
-    x = t;
-
-    B[7 * n] = reverse_byte(x >> 24);  B[6 * n] = reverse_byte(x >> 16);  B[5 * n] = reverse_byte(x >> 8);  B[4 * n] = reverse_byte(x);
-    B[3 * n] = reverse_byte(y >> 24);  B[2 * n] = reverse_byte(y >> 16);  B[1 * n] = reverse_byte(y >> 8);  B[0 * n] = reverse_byte(y);
-}
-
-void transpose_bin(char *A, char *B, const int n, const int m,
-    const int lda, const int ldb, const int block_size)
-{
-    int i;
-    #pragma omp parallel for
-    for (i = 0; i < n; i += 8) {
-        int j;
-        for (j = 0; j < m - 8; j += 8) {
-            int a_index = i*lda + j;
-            int b_index = j*ldb + i;
-            //transpose_8x8_bits_my(&A[a_index/8], &B[b_index/8], lda/8, ldb/8);
-            transpose8rS32_reversed_diagonale(&A[a_index / 8], lda / 8, ldb / 8, &B[b_index / 8]);
-        }
-        for (; j < m; ++j) {
-            if (get_bit(A, i*lda + j)) set_bit(B, j*ldb + i);
-        }
-    }
-}
-*/
 
 uint8_t reverse_8_bit(uint8_t a) {
     return ((a * 0x0802LU & 0x22110LU) | (a * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
@@ -433,563 +329,6 @@ void transpose_bin(uint32_t *A, uint32_t *B, const int n, const int m,
 }
 
 // -------------- blas.c --------------
-
-
-#ifdef AVX
-
-#ifdef _WIN64
-// Windows
-#include <intrin.h>
-#else
-// Linux
-#include <x86intrin.h>
-#endif
-
-#include <ammintrin.h>
-#include <immintrin.h>
-#include <smmintrin.h>
-#include <emmintrin.h>
-// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=broad&expand=561
-
-// https://software.intel.com/sites/landingpage/IntrinsicsGuide
-void gemm_nn(int M, int N, int K, float ALPHA,
-    float *A, int lda,
-    float *B, int ldb,
-    float *C, int ldc)
-{
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            float A_PART = ALPHA*A[i*lda + k];
-            __m256 a256, b256, c256, result256;    // AVX
-            a256 = _mm256_set1_ps(A_PART);
-            for (j = 0; j < N - 8; j += 8) {
-                b256 = _mm256_loadu_ps(&B[k*ldb + j]);
-                c256 = _mm256_loadu_ps(&C[i*ldc + j]);
-                // FMA - Intel Haswell (2013), AMD Piledriver (2012)
-                //result256 = _mm256_fmadd_ps(a256, b256, c256);
-                result256 = _mm256_mul_ps(a256, b256);
-                result256 = _mm256_add_ps(result256, c256);
-                _mm256_storeu_ps(&C[i*ldc + j], result256);
-            }
-
-            int prev_end = (N % 8 == 0) ? (N - 8) : (N / 8) * 8;
-            for (j = prev_end; j < N; ++j)
-                C[i*ldc + j] += A_PART*B[k*ldb + j];
-        }
-    }
-}
-
-
-#if defined(_MSC_VER) && _MSC_VER <= 1900
-static inline __int32 _mm256_extract_epi64(__m256i a, const int index) {
-    return a.m256i_i64[index];
-}
-
-static inline __int32 _mm256_extract_epi32(__m256i a, const int index) {
-    return a.m256i_i32[index];
-}
-#endif
-
-static inline float _castu32_f32(uint32_t a) {
-    return *((float *)&a);
-}
-
-#if defined(_MSC_VER)
-// Windows
-static inline float _mm256_extract_float32(__m256 a, const int index) {
-    return a.m256_f32[index];
-}
-#else
-// Linux
-static inline float _mm256_extract_float32(__m256 a, const int index) {
-    return _castu32_f32(_mm256_extract_epi32(_mm256_castps_si256(a), index));
-}
-#endif
-
-//From Berkeley Vision's Caffe!
-//https://github.com/BVLC/caffe/blob/master/LICENSE
-void im2col_cpu_custom(float* data_im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float* data_col)
-{
-
-    int c;
-    const int height_col = (height + 2 * pad - ksize) / stride + 1;
-    const int width_col = (width + 2 * pad - ksize) / stride + 1;
-    const int channels_col = channels * ksize * ksize;
-
-    // optimized version
-    if (height_col == height && width_col == width && stride == 1 && pad == 1)// && is_fma_avx())
-    {
-        #pragma omp parallel for
-        for (c = 0; c < channels_col; ++c) {
-            int h, w;
-            int w_offset = c % ksize;
-            int h_offset = (c / ksize) % ksize;
-            int c_im = c / ksize / ksize;
-            for (h = pad; h < height_col - pad; ++h) {
-                for (w = pad; w < width_col - pad - 8; w += 8) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    int col_index = (c * height_col + h) * width_col + w;
-
-                    //data_col[col_index] = data_im[im_col + width*(im_row + height*c_im)];
-                    __m256 src256 = _mm256_loadu_ps((float *)(&data_im[im_col + width*(im_row + height*c_im)]));
-                    _mm256_storeu_ps(&data_col[col_index], src256);
-                }
-
-                for (; w < width_col - pad; ++w) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    int col_index = (c * height_col + h) * width_col + w;
-
-                    data_col[col_index] = data_im[im_col + width*(im_row + height*c_im)];
-                }
-            }
-
-            {
-                w = 0;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    int col_index = (c * height_col + h) * width_col + w;
-                    data_col[col_index] = im2col_get_pixel(data_im, height, width, channels,
-                        im_row, im_col, c_im, pad);
-                }
-            }
-
-            {
-                w = width_col - 1;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    int col_index = (c * height_col + h) * width_col + w;
-                    data_col[col_index] = im2col_get_pixel(data_im, height, width, channels,
-                        im_row, im_col, c_im, pad);
-                }
-            }
-
-            {
-                h = 0;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    int col_index = (c * height_col + h) * width_col + w;
-                    data_col[col_index] = im2col_get_pixel(data_im, height, width, channels,
-                        im_row, im_col, c_im, pad);
-                }
-            }
-
-            {
-                h = height_col - 1;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    int col_index = (c * height_col + h) * width_col + w;
-                    data_col[col_index] = im2col_get_pixel(data_im, height, width, channels,
-                        im_row, im_col, c_im, pad);
-                }
-            }
-        }
-
-    }
-    else {
-        //printf("\n Error: is no non-optimized version \n");
-        im2col_cpu(data_im, channels, height, width, ksize, stride, pad, data_col);
-    }
-}
-
-//From Berkeley Vision's Caffe!
-//https://github.com/BVLC/caffe/blob/master/LICENSE
-void im2col_cpu_custom_bin(float* data_im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float* data_col, int bit_align)
-{
-    int c;
-    const int height_col = (height + 2 * pad - ksize) / stride + 1;
-    const int width_col = (width + 2 * pad - ksize) / stride + 1;
-    const int channels_col = channels * ksize * ksize;
-
-    // optimized version
-    if (height_col == height && width_col == width && stride == 1 && pad == 1)
-    {
-        //__m256i all256_sing1 = _mm256_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000);
-        __m256 float_zero256 = _mm256_set1_ps(0.00);
-
-        int new_ldb = bit_align;
-
-        #pragma omp parallel for
-        for (c = 0; c < channels_col; ++c) {
-            int h, w;
-            int w_offset = c % ksize;
-            int h_offset = (c / ksize) % ksize;
-            int c_im = c / ksize / ksize;
-            for (h = pad; h < height_col - pad; ++h) {
-                for (w = pad; w < width_col - pad - 8; w += 8) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //__m256i src256 = _mm256_loadu_si256((__m256i *)(&data_im[im_col + width*(im_row + height*c_im)]));
-                    //__m256i result256 = _mm256_and_si256(src256, all256_sing1); // check sign in 8 x 32-bit floats
-                    //uint16_t mask = _mm256_movemask_ps(_mm256_castsi256_ps(result256)); // (val >= 0) ? 0 : 1
-                    //mask = ~mask;   // inverse mask,  (val >= 0) ? 1 : 0
-
-                    __m256 src256 = _mm256_loadu_ps((float *)(&data_im[im_col + width*(im_row + height*c_im)]));
-                    __m256 result256 = _mm256_cmp_ps(src256, float_zero256, _CMP_GT_OS);
-                    uint16_t mask = _mm256_movemask_ps(result256); // (val > 0) ? 0 : 1
-
-                    uint16_t *dst_ptr = &((unsigned char*)data_col)[col_index / 8];
-                    *dst_ptr |= (mask << (col_index % 8));
-                }
-
-                for (; w < width_col - pad; ++w) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = data_im[im_col + width*(im_row + height*c_im)];
-                    float val = data_im[im_col + width*(im_row + height*c_im)];
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                w = 0;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                w = width_col - 1;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                h = 0;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                h = height_col - 1;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-        }
-
-    }
-    else {
-        printf("\n Error: is no non-optimized version \n");
-        //im2col_cpu(data_im, channels, height, width, ksize, stride, pad, data_col); // must be aligned for transpose after float_to_bin
-        // float_to_bit(b, t_input, src_size);
-        // transpose_bin(t_input, *t_bit_input, k, n, bit_align, new_ldb, 8);
-    }
-}
-
-void activate_array_cpu_custom(float *x, const int n, const ACTIVATION a)
-{
-    int i = 0;
-    if (a == LINEAR)
-    {
-    }
-    else if (a == LEAKY)
-    {
-        {
-            __m256i all256_sing1 = _mm256_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000);
-            __m256 all256_01 = _mm256_set1_ps(0.1F);
-
-            for (i = 0; i < n - 8; i += 8) {
-                //x[i] = (x[i]>0) ? x[i] : .1*x[i];
-
-                __m256 src256 = _mm256_loadu_ps(&x[i]);
-                __m256 mult256 = _mm256_mul_ps((src256), all256_01); // mult * 0.1
-
-                __m256i sign256 = _mm256_and_si256(_mm256_castps_si256(src256), all256_sing1); // check sign in 8 x 32-bit floats
-
-                __m256 result256 = _mm256_blendv_ps(src256, mult256, _mm256_castsi256_ps(sign256)); // (sign>0) ? src : mult;
-                _mm256_storeu_ps(&x[i], result256);
-            }
-        }
-
-        for (; i < n; ++i) {
-            x[i] = (x[i]>0) ? x[i] : .1*x[i];
-        }
-    }
-    else {
-        for (i = 0; i < n; ++i) {
-            x[i] = activate(x[i], a);
-        }
-    }
-}
-
-
-void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, int w, int h, int out_w, int out_h, int c,
-    int pad, int stride, int batch)
-{
-
-    const int w_offset = -pad / 2;
-    const int h_offset = -pad / 2;
-    int b, k;
-
-    for (b = 0; b < batch; ++b) {
-        #pragma omp parallel for
-        for (k = 0; k < c; ++k) {
-            int i, j, m, n;
-            for (i = 0; i < out_h; ++i) {
-                //for (j = 0; j < out_w; ++j) {
-                j = 0;
-
-                if (stride == 1) {
-                    for (j = 0; j < out_w - 8 - (size - 1); j += 8) {
-                        int out_index = j + out_w*(i + out_h*(k + c*b));
-                        __m256 max256 = _mm256_set1_ps(-FLT_MAX);
-                        for (n = 0; n < size; ++n) {
-                            for (m = 0; m < size; ++m) {
-                                int cur_h = h_offset + i*stride + n;
-                                int cur_w = w_offset + j*stride + m;
-                                int index = cur_w + w*(cur_h + h*(k + b*c));
-                                int valid = (cur_h >= 0 && cur_h < h &&
-                                    cur_w >= 0 && cur_w < w);
-                                if (!valid) continue;
-
-                                __m256 src256 = _mm256_loadu_ps(&src[index]);
-                                max256 = _mm256_max_ps(src256, max256);
-                            }
-                        }
-                        _mm256_storeu_ps(&dst[out_index], max256);
-
-                    }
-                }
-                else if (size == 2 && stride == 2) {
-                    for (j = 0; j < out_w - 4; j += 4) {
-                        int out_index = j + out_w*(i + out_h*(k + c*b));
-                        float max = -FLT_MAX;
-                        int max_i = -1;
-                        __m128 max128 = _mm_set1_ps(-FLT_MAX);
-
-                        for (n = 0; n < size; ++n) {
-                            //for (m = 0; m < size; ++m)
-                            m = 0;
-                            {
-                                int cur_h = h_offset + i*stride + n;
-                                int cur_w = w_offset + j*stride + m;
-                                int index = cur_w + w*(cur_h + h*(k + b*c));
-                                int valid = (cur_h >= 0 && cur_h < h &&
-                                    cur_w >= 0 && cur_w < w);
-                                if (!valid) continue;
-
-                                __m256 src256 = _mm256_loadu_ps(&src[index]);
-                                __m256 src256_2 = _mm256_permute_ps(src256, (1 << 0) | (3 << 4));
-                                __m256 max256 = _mm256_max_ps(src256, src256_2);
-
-                                __m128 src128_0 = _mm256_extractf128_ps(max256, 0);
-                                __m128 src128_1 = _mm256_extractf128_ps(max256, 1);
-                                __m128 src128 = _mm_shuffle_ps(src128_0, src128_1, (2 << 2) | (2 << 6));
-
-                                max128 = _mm_max_ps(src128, max128);
-                            }
-                        }
-                        _mm_storeu_ps(&dst[out_index], max128);
-                    }
-                }
-
-                for (; j < out_w; ++j) {
-                    int out_index = j + out_w*(i + out_h*(k + c*b));
-                    float max = -FLT_MAX;
-                    int max_i = -1;
-                    for (n = 0; n < size; ++n) {
-                        for (m = 0; m < size; ++m) {
-                            int cur_h = h_offset + i*stride + n;
-                            int cur_w = w_offset + j*stride + m;
-                            int index = cur_w + w*(cur_h + h*(k + b*c));
-                            int valid = (cur_h >= 0 && cur_h < h &&
-                                cur_w >= 0 && cur_w < w);
-                            float val = (valid != 0) ? src[index] : -FLT_MAX;
-                            max_i = (val > max) ? index : max_i;
-                            max = (val > max) ? val : max;
-                        }
-                    }
-                    dst[out_index] = max;
-                    indexes[out_index] = max_i;
-                }
-            }
-        }
-    }
-}
-
-
-// http://graphics.stanford.edu/~seander/bithacks.html
-// https://stackoverflow.com/questions/17354971/fast-counting-the-number-of-set-bits-in-m128i-register
-// https://arxiv.org/pdf/1611.07612.pdf
-
-static inline int popcnt128(__m128i n) {
-    const __m128i n_hi = _mm_unpackhi_epi64(n, n);
-#ifdef _MSC_VER
-    return __popcnt64(_mm_cvtsi128_si64(n)) + __popcnt64(_mm_cvtsi128_si64(n_hi));
-#else
-    return __popcntq(_mm_cvtsi128_si64(n)) + __popcntq(_mm_cvtsi128_si64(n_hi));
-#endif
-}
-
-static inline int popcnt256(__m256i n) {
-    return popcnt128(_mm256_extractf128_si256(n, 0)) + popcnt128(_mm256_extractf128_si256(n, 1));
-}
-
-static inline __m256i count256(__m256i v) {
-    __m256i lookup =
-        _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2,
-            2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3,
-            1, 2, 2, 3, 2, 3, 3, 4);
-
-    __m256i low_mask = _mm256_set1_epi8(0x0f);
-
-    __m256i lo = _mm256_and_si256(v, low_mask);
-    __m256i hi = _mm256_and_si256(_mm256_srli_epi32(v, 4), low_mask);
-    __m256i popcnt1 = _mm256_shuffle_epi8(lookup, lo);
-    __m256i popcnt2 = _mm256_shuffle_epi8(lookup, hi);
-    __m256i total = _mm256_add_epi8(popcnt1, popcnt2);
-
-    return _mm256_sad_epu8(total, _mm256_setzero_si256());
-}
-
-static inline int popcnt256_custom(__m256i n) {
-    __m256i val = count256(n);
-
-    //return val.m256i_i64[0] +
-    //val.m256i_i64[1] +
-    //val.m256i_i64[2] +
-    //val.m256i_i64[3];
-    return _mm256_extract_epi64(val, 0)
-        + _mm256_extract_epi64(val, 1)
-        + _mm256_extract_epi64(val, 2)
-        + _mm256_extract_epi64(val, 3);
-}
-
-// 5x times faster than gemm()-float32
-// further optimizations: do mean-mult only for the last layer
-void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
-    unsigned char *A, int lda,
-    unsigned char *B, int ldb,
-    float *C, int ldc, float *mean_arr)
-{
-
-#if defined(_OPENMP)
-    static int max_num_threads = 0;
-    if (max_num_threads == 0) {
-        max_num_threads = omp_get_max_threads();
-        //omp_set_num_threads(max_num_threads / 2);
-    }
-#endif
-
-    int i;
-    #pragma omp parallel for
-    for (i = 0; i < M; ++i)
-    {   // l.n - filters [16 - 55 - 1024]
-        float mean_val = mean_arr[i];
-        int j, k;
-        __m256i all_1 = _mm256_set1_epi8(255);
-
-        for (j = 0; j < N; ++j) { // out_h*out_w - one channel output size [169 - 173056]
-            int count = 0;
-            const int bit_step = 256;
-            __m256i count_sum = _mm256_set1_epi8(0);
-
-            for (k = 0; k < K; k += bit_step) {   // l.size*l.size*l.c - one filter size [27 - 9216]
-                __m256i a_bit256 = _mm256_loadu_si256((__m256i *)(A + (i*lda + k) / 8));
-                __m256i b_bit256 = _mm256_loadu_si256((__m256i *)(B + (j*ldb + k) / 8));
-                __m256i xor256 = _mm256_xor_si256(a_bit256, b_bit256);  // xnor = not(xor(a,b))
-                __m256i c_bit256 = _mm256_andnot_si256(xor256, all_1);  // can be optimized - we can do other NOT for wegihts once and do not do this NOT
-
-                count_sum = _mm256_add_epi64(count256(c_bit256), count_sum);    //  Mula’s algorithm
-
-                                                                                //count += popcnt256(c_bit256);
-
-                                                                                //binary_int64_printf(c_bit64);
-                                                                                //printf(", count = %d \n\n", tmp_count);
-            }
-
-            // count of 1 bits
-            //count = count_sum.m256i_i64[0] +
-            //    count_sum.m256i_i64[1] +
-            //    count_sum.m256i_i64[2] +
-            //   count_sum.m256i_i64[3];
-            count = _mm256_extract_epi64(count_sum, 0)
-                + _mm256_extract_epi64(count_sum, 1)
-                + _mm256_extract_epi64(count_sum, 2)
-                + _mm256_extract_epi64(count_sum, 3);
-
-            int f1 = (K % bit_step == 0) ? 0 : (bit_step - (K % bit_step));
-            count = count - f1;    // remove extra bits (from empty space for align only)
-
-            C[i*ldc + j] = (2 * count - K) * mean_val;
-        }
-    }
-}
-
-
-
-void float_to_bit(float *src, unsigned char *dst, size_t size)
-{
-    size_t dst_size = size / 8 + 1;
-    memset(dst, 0, dst_size);
-
-    size_t i;
-    //__m256i all256_sing1 = _mm256_set_epi32(0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000);
-    __m256 float_zero256 = _mm256_set1_ps(0.0);
-
-    for (i = 0; i < size; i += 8)
-    {
-        //__m256i src256 = _mm256_loadu_si256((__m256i *)(&src[i]));
-        //__m256i result256 = _mm256_and_si256(src256, all256_sing1); // check sign in 8 x 32-bit floats
-        //uint32_t mask = _mm256_movemask_ps(_mm256_castsi256_ps(result256)); // (val >= 0) ? 0 : 1
-        ////mask = ~mask;   // inverse mask,  (val >= 0) ? 1 : 0
-
-        __m256 src256 = _mm256_loadu_ps((float *)(&src[i]));
-        __m256 result256 = _mm256_cmp_ps(src256, float_zero256, _CMP_GT_OS);
-        uint32_t mask = _mm256_movemask_ps(result256); // (val > 0) ? 0 : 1
-
-        dst[i / 8] = mask;
-    }
-}
-
-#else // AVX
 
 void gemm_nn(int M, int N, int K, float ALPHA,
     float *A, int lda,
@@ -1259,7 +598,6 @@ void float_to_bit(float *src, unsigned char *dst, size_t size)
     }
     free(byte_arr);
 }
-#endif    // __x86_64
 
 /*
 void gemm_nn(int M, int N, int K, float ALPHA,
@@ -1718,9 +1056,6 @@ char **get_labels(char *filename)
 // network.c
 float *get_network_output(network net)
 {
-#ifdef GPU
-    if (gpu_index >= 0) return get_network_output_gpu(net);
-#endif
     int i;
     for (i = net.n - 1; i > 0; --i) if (net.layers[i].type != COST) break;
     return net.layers[i].output;
@@ -1741,10 +1076,6 @@ network make_network(int n)
     net.n = n;
     net.layers = calloc(net.n, sizeof(layer));
     net.seen = calloc(1, sizeof(uint64_t));
-#ifdef GPU
-    net.input_gpu = calloc(1, sizeof(float *));
-    net.truth_gpu = calloc(1, sizeof(float *));
-#endif
     return net;
 }
 
@@ -1760,89 +1091,8 @@ void free_network(network net)
     free(net.steps);
     free(net.seen);
 
-#ifdef GPU
-    if (gpu_index >= 0) cuda_free(net.workspace);
-    else free(net.workspace);
-    if (net.input_state_gpu) cuda_free(net.input_state_gpu);
-    if (*net.input_gpu) cuda_free(*net.input_gpu);
-    if (*net.truth_gpu) cuda_free(*net.truth_gpu);
-    if (net.input_gpu) free(net.input_gpu);
-    if (net.truth_gpu) free(net.truth_gpu);
-
-    //if (*net.input16_gpu) cuda_free(*net.input16_gpu);
-    //if (*net.output16_gpu) cuda_free(*net.output16_gpu);
-    //if (net.input16_gpu) free(net.input16_gpu);
-    //if (net.output16_gpu) free(net.output16_gpu);
-    //if (net.max_input16_size) free(net.max_input16_size);
-    //if (net.max_output16_size) free(net.max_output16_size);
-#else
     free(net.workspace);
-#endif
 }
-
-
-// network.c
-#ifdef GPU
-#ifdef CUDNN
-void cudnn_convolutional_setup(layer *l)
-{
-#if(CUDNN_MAJOR >= 7)
-    cudnnSetConvolutionMathType(l->convDesc, CUDNN_TENSOR_OP_MATH);
-#if((CUDNN_MAJOR*10 + CUDNN_MINOR) >= 72)   // cuDNN >= 7.2
-    cudnnSetConvolutionMathType(l->convDesc, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION);
-#endif  //(CUDNN_MAJOR >= 7.2)
-#endif  //(CUDNN_MAJOR >= 7)
-
-    if (l->quantized)
-    {
-        cudnnDataType_t cudnn_data_type = CUDNN_DATA_INT8x4;
-        cudnnTensorFormat_t tensor_format = CUDNN_TENSOR_NCHW_VECT_C;
-        cudnnTensorFormat_t dst_tensor_format = CUDNN_TENSOR_NCHW;
-
-#if((CUDNN_MAJOR*10 + CUDNN_MINOR) >= 72)
-        //if (l->c % 32 == 0) cudnn_data_type = CUDNN_DATA_INT8x32;   // Tensor Cores for INT8
-#endif  //(CUDNN_MAJOR >= 7.2)
-
-        cudnnSetTensor4dDescriptor(l->srcTensorDesc, CUDNN_TENSOR_NCHW_VECT_C, cudnn_data_type, l->batch, l->c, l->h, l->w);
-        cudnnSetFilter4dDescriptor(l->weightDesc, cudnn_data_type, CUDNN_TENSOR_NCHW_VECT_C, l->n, l->c, l->size, l->size);
-        cudnnSetTensor4dDescriptor(l->dstTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, l->batch, l->out_c, l->out_h, l->out_w);
-        cudnnSetConvolution2dDescriptor(l->convDesc, l->pad, l->pad, l->stride, l->stride, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_INT32);    // cudnn 7
-
-        l->fw_algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM; // only supported for DP4A INT8x4
-
-                                                                       // BIAS float
-        cudnnSetTensor4dDescriptor(l->biasTensorDesc, dst_tensor_format, CUDNN_DATA_FLOAT, 1, l->out_c, 1, 1);
-
-        // https://en.wikipedia.org/wiki/Activation_function
-        // CUDNN_ACTIVATION_IDENTITY
-        cudnnSetActivationDescriptor(l->activationDesc, CUDNN_ACTIVATION_IDENTITY, CUDNN_NOT_PROPAGATE_NAN, 0);
-        //cudnnSetActivationDescriptor(activationDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 0.1);    // RELU or ELU can't replace LEAKY_RELU
-    }
-    else {
-        cudnnSetTensor4dDescriptor(l->srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, l->batch, l->c, l->h, l->w);
-        cudnnSetTensor4dDescriptor(l->dstTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, l->batch, l->out_c, l->out_h, l->out_w);
-        cudnnSetFilter4dDescriptor(l->weightDesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, l->n, l->c, l->size, l->size);
-#if(CUDNN_MAJOR >= 6)
-        cudnnSetConvolution2dDescriptor(l->convDesc, l->pad, l->pad, l->stride, l->stride, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT);    // cudnn 6.0
-#else
-        cudnnSetConvolution2dDescriptor(l->convDesc, l->pad, l->pad, l->stride, l->stride, 1, 1, CUDNN_CROSS_CORRELATION);    // cudnn 5.1
-#endif
-        cudnnGetConvolutionForwardAlgorithm(cudnn_handle(),
-            l->srcTensorDesc,
-            l->weightDesc,
-            l->convDesc,
-            l->dstTensorDesc,
-            CUDNN_CONVOLUTION_FWD_PREFER_FASTEST,
-            0,
-            &l->fw_algo);
-
-        //l->fw_algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM; // un-comment to use Tensor Cores for cuDNN >= 7.2
-    }
-}
-#endif
-#endif
-
-
 
 // network.c
 void set_batch_network(network *net, int b)
@@ -1852,11 +1102,6 @@ void set_batch_network(network *net, int b)
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
         l.batch = b;
-#ifdef CUDNN
-        if (l.type == CONVOLUTIONAL) {
-            cudnn_convolutional_setup(net->layers + i);
-        }
-#endif
     }
 }
 
@@ -1868,9 +1113,6 @@ void free_layer(layer l)
 {
     if (l.type == DROPOUT) {
         if (l.rand)           free(l.rand);
-#ifdef GPU
-        if (l.rand_gpu)             cuda_free(l.rand_gpu);
-#endif
         return;
     }
     if (l.cweights)           free(l.cweights);
@@ -1917,55 +1159,6 @@ void free_layer(layer l)
     if (l.r_cpu)              free(l.r_cpu);
     if (l.h_cpu)              free(l.h_cpu);
     if (l.binary_input)       free(l.binary_input);
-
-#ifdef GPU
-    if (l.indexes_gpu)           cuda_free((float *)l.indexes_gpu);
-
-    if (l.z_gpu)                   cuda_free(l.z_gpu);
-    if (l.r_gpu)                   cuda_free(l.r_gpu);
-    if (l.h_gpu)                   cuda_free(l.h_gpu);
-    if (l.m_gpu)                   cuda_free(l.m_gpu);
-    if (l.v_gpu)                   cuda_free(l.v_gpu);
-    if (l.prev_state_gpu)          cuda_free(l.prev_state_gpu);
-    if (l.forgot_state_gpu)        cuda_free(l.forgot_state_gpu);
-    if (l.forgot_delta_gpu)        cuda_free(l.forgot_delta_gpu);
-    if (l.state_gpu)               cuda_free(l.state_gpu);
-    if (l.state_delta_gpu)         cuda_free(l.state_delta_gpu);
-    if (l.gate_gpu)                cuda_free(l.gate_gpu);
-    if (l.gate_delta_gpu)          cuda_free(l.gate_delta_gpu);
-    if (l.save_gpu)                cuda_free(l.save_gpu);
-    if (l.save_delta_gpu)          cuda_free(l.save_delta_gpu);
-    if (l.concat_gpu)              cuda_free(l.concat_gpu);
-    if (l.concat_delta_gpu)        cuda_free(l.concat_delta_gpu);
-    if (l.binary_input_gpu)        cuda_free(l.binary_input_gpu);
-    if (l.binary_weights_gpu)      cuda_free(l.binary_weights_gpu);
-    if (l.mean_gpu)                cuda_free(l.mean_gpu);
-    if (l.variance_gpu)            cuda_free(l.variance_gpu);
-    if (l.rolling_mean_gpu)        cuda_free(l.rolling_mean_gpu);
-    if (l.rolling_variance_gpu)    cuda_free(l.rolling_variance_gpu);
-    if (l.variance_delta_gpu)      cuda_free(l.variance_delta_gpu);
-    if (l.mean_delta_gpu)          cuda_free(l.mean_delta_gpu);
-    if (l.x_gpu)                   cuda_free(l.x_gpu);
-    if (l.x_norm_gpu)              cuda_free(l.x_norm_gpu);
-
-    if (l.align_bit_weights_gpu)   cuda_free(l.align_bit_weights_gpu);
-    if (l.mean_arr_gpu)            cuda_free(l.mean_arr_gpu);
-    if (l.align_workspace_gpu)     cuda_free(l.align_workspace_gpu);
-    if (l.transposed_align_workspace_gpu) cuda_free(l.transposed_align_workspace_gpu);
-
-    if (l.weights_gpu)             cuda_free(l.weights_gpu);
-    //if (l.weight_updates_gpu)      cuda_free(l.weight_updates_gpu);
-    if (l.biases_gpu)              cuda_free(l.biases_gpu);
-    //if (l.bias_updates_gpu)        cuda_free(l.bias_updates_gpu);
-    if (l.scales_gpu)              cuda_free(l.scales_gpu);
-    //if (l.scale_updates_gpu)       cuda_free(l.scale_updates_gpu);
-    if (l.output_gpu)              cuda_free(l.output_gpu);
-    if (l.output_gpu_int8)         cuda_free(l.output_gpu_int8);
-    if (l.delta_gpu)               cuda_free(l.delta_gpu);
-    if (l.rand_gpu)                cuda_free(l.rand_gpu);
-    if (l.squared_gpu)             cuda_free(l.squared_gpu);
-    if (l.norms_gpu)               cuda_free(l.norms_gpu);
-#endif
 }
 
 
@@ -1988,21 +1181,6 @@ softmax_layer make_softmax_layer(int batch, int inputs, int groups)
     // commented only for this custom version of Yolo v2
     //l.forward = forward_softmax_layer;
     //l.backward = backward_softmax_layer;
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_softmax_layer_gpu;
-    //l.backward_gpu = backward_softmax_layer_gpu;
-
-    l.output_gpu = cuda_make_array(l.output, inputs*batch);
-    cudaError_t status;
-    status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*inputs*batch);
-    //l.delta_gpu = cuda_make_array(l.delta, inputs*batch);
-#endif
-
-#ifdef OPENCL
-    l.output_ocl = ocl_make_array(l.output, inputs*batch);
-#endif
-
     return l;
 }
 
@@ -2033,11 +1211,6 @@ layer make_upsample_layer(int batch, int w, int h, int c, int stride)
     l.output = calloc(l.outputs*batch, sizeof(float));;
 
     //l.forward = forward_upsample_layer;
-#ifdef GPU
-    //l.forward_gpu = forward_upsample_layer_gpu;
-
-    l.output_gpu = cuda_make_array(l.output, l.outputs*batch);
-#endif
     if (l.reverse) fprintf(stderr, "downsample         %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
     else fprintf(stderr, "upsample           %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
     return l;
@@ -2063,10 +1236,7 @@ layer make_shortcut_layer(int batch, int index, int w, int h, int c, int w2, int
 
     l.index = index;
 
-    l.output = calloc(l.outputs*batch, sizeof(float));;
-#ifdef GPU
-    l.output_gpu = cuda_make_array(l.output, l.outputs*batch);
-#endif
+    l.output = calloc(l.outputs*batch, sizeof(float));
     return l;
 }
 
@@ -2104,20 +1274,6 @@ layer make_reorg_layer(int batch, int w, int h, int c, int stride, int reverse)
     // commented only for this custom version of Yolo v2
     //l.forward = forward_reorg_layer;
     //l.backward = backward_reorg_layer;
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_reorg_layer_gpu;
-    //l.backward_gpu = backward_reorg_layer_gpu;
-
-    l.output_gpu = cuda_make_array(l.output, output_size);
-    cudaError_t status;
-    status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*output_size);
-    //l.delta_gpu = cuda_make_array(l.delta, output_size);
-#endif
-
-#ifdef OPENCL
-    l.output_ocl = ocl_make_array(l.output, output_size);
-#endif
     return l;
 }
 
@@ -2149,20 +1305,6 @@ route_layer make_route_layer(int batch, int n, int *input_layers, int *input_siz
     // commented only for this custom version of Yolo v2
     //l.forward = forward_route_layer;
     //l.backward = backward_route_layer;
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_route_layer_gpu;
-    //l.backward_gpu = backward_route_layer_gpu;
-
-    //l.delta_gpu = cuda_make_array(l.delta, outputs*batch);
-    l.output_gpu = cuda_make_array(l.output, outputs*batch);
-    cudaError_t status;
-    status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*outputs*batch);
-#endif
-
-#ifdef OPENCL
-    l.output_ocl = ocl_make_array(l.output, outputs*batch);
-#endif
     return l;
 }
 
@@ -2204,10 +1346,6 @@ layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int 
         l.biases[i] = .5;
     }
 
-#ifdef GPU
-    l.output_gpu = cuda_make_array(l.output, batch*l.outputs);
-#endif
-
     fprintf(stderr, "yolo\n");
     srand(0);
 
@@ -2244,20 +1382,6 @@ region_layer make_region_layer(int batch, int w, int h, int n, int classes, int 
     // commented only for this custom version of Yolo v2
     //l.forward = forward_region_layer;
     //l.backward = backward_region_layer;
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_region_layer_gpu;
-    //l.backward_gpu = backward_region_layer_gpu;
-    l.output_gpu = cuda_make_array(l.output, batch*l.outputs);
-    cudaError_t status;
-    status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*l.outputs*batch);
-    //l.delta_gpu = cuda_make_array(l.delta, batch*l.outputs);
-#endif
-
-#ifdef OPENCL
-    l.output_ocl = ocl_make_array(l.output, batch*l.outputs);
-#endif
-
     fprintf(stderr, "detection\n");
     srand(0);
 
@@ -2292,40 +1416,6 @@ maxpool_layer make_maxpool_layer(int batch, int h, int w, int c, int size, int s
     // commented only for this custom version of Yolo v2
     //l.forward = forward_maxpool_layer;
     //l.backward = backward_maxpool_layer;
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_maxpool_layer_gpu;
-    //l.backward_gpu = backward_maxpool_layer_gpu;
-    l.indexes_gpu = cuda_make_int_array(output_size);
-    l.output_gpu = cuda_make_array(l.output, output_size);
-    cudaError_t status;
-    status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*output_size);
-    //l.delta_gpu = cuda_make_array(l.delta, output_size);
-
-    cudnnStatus_t maxpool_status;
-    maxpool_status = cudnnCreatePoolingDescriptor(&l.poolingDesc);
-
-    maxpool_status = cudnnSetPooling2dDescriptor(
-        l.poolingDesc,
-        CUDNN_POOLING_MAX,
-        CUDNN_PROPAGATE_NAN,    // CUDNN_PROPAGATE_NAN, CUDNN_NOT_PROPAGATE_NAN
-        l.size,
-        l.size,
-        0, //l.pad,
-        0, //l.pad,
-        l.stride,
-        l.stride);
-
-    cudnnCreateTensorDescriptor(&l.srcTensorDesc);
-    cudnnCreateTensorDescriptor(&l.dstTensorDesc);
-    cudnnSetTensor4dDescriptor(l.srcTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, l.batch, l.c, l.h, l.w);
-    cudnnSetTensor4dDescriptor(l.dstTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, l.batch, l.out_c, l.out_h, l.out_w);
-#endif
-
-#ifdef OPENCL
-    l.indexes_ocl = ocl_make_int_array(output_size);
-    l.output_ocl = ocl_make_array(l.output, output_size);
-#endif
     fprintf(stderr, "max          %d x %d / %d  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", size, size, stride, w, h, c, l.out_w, l.out_h, l.out_c);
     return l;
 }
@@ -2335,38 +1425,6 @@ maxpool_layer make_maxpool_layer(int batch, int h, int w, int c, int size, int s
 
 // convolutional_layer.c
 size_t get_workspace_size(layer l) {
-#ifdef CUDNN
-    if (gpu_index >= 0) {
-        size_t most = 0;
-        size_t s = 0;
-        cudnnGetConvolutionForwardWorkspaceSize(cudnn_handle(),
-            l.srcTensorDesc,
-            l.weightDesc,
-            l.convDesc,
-            l.dstTensorDesc,
-            l.fw_algo,
-            &s);
-        /*
-        if (s > most) most = s;
-        cudnnGetConvolutionBackwardFilterWorkspaceSize(cudnn_handle(),
-        l.srcTensorDesc,
-        l.ddstTensorDesc,
-        l.convDesc,
-        l.dweightDesc,
-        l.bf_algo,
-        &s);
-        if (s > most) most = s;
-        cudnnGetConvolutionBackwardDataWorkspaceSize(cudnn_handle(),
-        l.weightDesc,
-        l.ddstTensorDesc,
-        l.convDesc,
-        l.dsrcTensorDesc,
-        l.bd_algo,
-        &s);*/
-        if (s > most) most = s;
-        return most;
-    }
-#endif
     if (l.xnor) return (size_t)l.bit_align*l.size*l.size*l.c * sizeof(float);
     return (size_t)l.out_h*l.out_w*l.size*l.size*l.c * sizeof(float);
 }
@@ -2467,86 +1525,6 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
         l.m = calloc(c*n*size*size, sizeof(float));
         l.v = calloc(c*n*size*size, sizeof(float));
     }
-
-#ifdef GPU
-    // commented only for this custom version of Yolo v2
-    //l.forward_gpu = forward_convolutional_layer_gpu;
-    //l.backward_gpu = backward_convolutional_layer_gpu;
-    //l.update_gpu = update_convolutional_layer_gpu;
-
-    if (gpu_index >= 0) {
-        //if (adam) {
-        //    l.m_gpu = cuda_make_array(l.m, c*n*size*size);
-        //    l.v_gpu = cuda_make_array(l.v, c*n*size*size);
-        //}
-
-        l.weights_gpu = cuda_make_array(l.weights, c*n*size*size);
-        //l.weight_updates_gpu = cuda_make_array(l.weight_updates, c*n*size*size);
-
-        l.biases_gpu = cuda_make_array(l.biases, n);
-        //l.bias_updates_gpu = cuda_make_array(l.bias_updates, n);
-
-        //l.delta_gpu = cuda_make_array(l.delta, l.batch*out_h*out_w*n);
-        l.output_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
-
-        cudaError_t status;
-        status = cudaMalloc((void **)&(l.output_gpu_int8), sizeof(int8_t)*l.batch*out_h*out_w*n);
-
-        //if (binary) {
-        //    l.binary_weights_gpu = cuda_make_array(l.weights, c*n*size*size);
-        //}
-        if (xnor) {
-            l.binary_weights_gpu = cuda_make_array(l.weights, c*n*size*size);
-            l.binary_input_gpu = cuda_make_array(0, l.inputs*l.batch);
-        }
-
-        if (batch_normalize) {
-            //l.mean_gpu = cuda_make_array(l.mean, n);
-            //l.variance_gpu = cuda_make_array(l.variance, n);
-
-            l.rolling_mean_gpu = cuda_make_array(l.mean, n);
-            l.rolling_variance_gpu = cuda_make_array(l.variance, n);
-
-            //l.mean_delta_gpu = cuda_make_array(l.mean, n);
-            //l.variance_delta_gpu = cuda_make_array(l.variance, n);
-
-            l.scales_gpu = cuda_make_array(l.scales, n);
-            //l.scale_updates_gpu = cuda_make_array(l.scale_updates, n);
-
-            l.x_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
-            //l.x_norm_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
-        }
-#ifdef CUDNN
-        cudnnCreateTensorDescriptor(&l.biasTensorDesc);
-        cudnnCreateActivationDescriptor(&l.activationDesc);
-        cudnnCreateTensorDescriptor(&l.srcTensorDesc);
-        cudnnCreateTensorDescriptor(&l.dstTensorDesc);
-        cudnnCreateFilterDescriptor(&l.weightDesc);
-        //cudnnCreateTensorDescriptor(&l.dsrcTensorDesc);
-        //cudnnCreateTensorDescriptor(&l.ddstTensorDesc);
-        //cudnnCreateFilterDescriptor(&l.dweightDesc);
-        cudnnCreateConvolutionDescriptor(&l.convDesc);
-        cudnn_convolutional_setup(&l);
-#endif
-    }
-#endif
-
-#ifdef OPENCL
-    //if (gpu_index >= 0) {
-
-    l.weights_ocl = ocl_make_array(l.weights, c*n*size*size);
-    l.biases_ocl = ocl_make_array(l.biases, n);
-    l.output_ocl = ocl_make_array(l.output, l.batch*out_h*out_w*n);
-
-    if (batch_normalize) {
-        l.rolling_mean_ocl = ocl_make_array(l.rolling_mean, n);    // l.mean
-        l.rolling_variance_ocl = ocl_make_array(l.rolling_variance, n);    // l.variance
-        l.scales_ocl = ocl_make_array(l.scales, n);
-
-        l.x_ocl = ocl_make_array(l.output, l.batch*out_h*out_w*n);
-    }
-    //}
-#endif
 
     l.workspace_size = get_workspace_size(l);
     l.activation = activation;
@@ -3117,35 +2095,11 @@ void load_convolutional_weights_cpu(layer l, FILE *fp)
         fread(l.rolling_variance, sizeof(float), l.n, fp);
     }
     fread(l.weights, sizeof(float), num, fp);
-    /*    if (l.adam) {
-    fread(l.m, sizeof(float), num, fp);
-    fread(l.v, sizeof(float), num, fp);
-    }
-    if (l.flipped) {
-    transpose_matrix(l.weights, l.c*l.size*l.size, l.n);
-    }*/
-    //if (l.binary) binarize_weights(l.weights, l.n, l.c*l.size*l.size, l.weights);
-#ifdef GPU
-    if (gpu_index >= 0) {
-        push_convolutional_layer(l);
-    }
-#endif
-
-#ifdef OPENCL
-    //if (gpu_index >= 0) {
-    ocl_push_convolutional_layer(l);
-    //}
-#endif
 }
 
 // parser.c
 void load_weights_upto_cpu(network *net, char *filename, int cutoff)
 {
-#ifdef GPU
-    if (net->gpu_index >= 0) {
-        cuda_set_device(net->gpu_index);
-    }
-#endif
     fprintf(stderr, "Loading weights from %s...", filename);
     fflush(stdout);
     FILE *fp = fopen(filename, "rb");
@@ -3704,26 +2658,7 @@ network parse_network_cfg(char *filename, int batch, int quantized)
     net.output = get_network_output(net);
     if (workspace_size) {
         //printf("%ld\n", workspace_size);
-#ifdef GPU
-        if (gpu_index >= 0) {
-            net.workspace = cuda_make_array(0, (workspace_size - 1) / sizeof(float) + 1);
-            int size = net.layers[0].inputs * net.batch;    //get_network_input_size(net) * net.batch;
-            net.input_state_gpu = cuda_make_array(0, size);
-        }
-        else {
-            net.workspace = calloc(1, workspace_size);
-        }
-#else    // GPU
         net.workspace = calloc(1, workspace_size);
-#endif    // GPU
-
-#ifdef OPENCL
-        //if (gpu_index >= 0) {
-        net.workspace_ocl = ocl_make_array(0, workspace_size / sizeof(float));
-        //net.workspace_ocl = ocl_make_array(0, (workspace_size - 1) / sizeof(float) + 1);
-        //net.workspace_ocl = ocl_make_array(NULL, 1024*1024*1024);
-        //}
-#endif    // OPENCL
     }
     return net;
 }
@@ -4281,18 +3216,6 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
             //char *id = basecfg(path);
             float *X = val_resized[t].data;
             //network_predict(net, X);
-#ifdef GPU
-            if (quantized) {
-                network_predict_gpu_cudnn_quantized(net, X);    // quantized
-                //nms = 0.2;
-            }
-            else {
-                network_predict_gpu_cudnn(net, X);
-            }
-#else    // GPU
-#ifdef OPENCL
-            network_predict_opencl(net, X);
-#else    // OPENCL
             if (quantized) {
                 network_predict_quantized(net, X);    // quantized
                 //nms = 0.2;
@@ -4300,8 +3223,6 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
             else {
                 network_predict_cpu(net, X);
             }
-#endif    // OPENCL
-#endif    // GPU
 
             int nboxes = 0;
             int letterbox = (args.type == LETTERBOX_DATA);
@@ -4565,17 +3486,6 @@ void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, in
     //set_batch_network(&net, 1);
     yolov2_fuse_conv_batchnorm(net);
     srand(time(0));
-
-#ifdef GPU
-    size_t workspace_size = 0;
-    for (j = 0; j < net.n; ++j) {
-        layer l = net.layers[j];
-        size_t cur_workspace_size = (size_t)l.out_h*l.out_w*l.size*l.size*l.c * sizeof(float);
-        if (cur_workspace_size > workspace_size) workspace_size = cur_workspace_size;
-    }
-    cudaFree(net.workspace);
-    net.workspace = calloc(1, workspace_size);
-#endif // GPU
 
     list *plist = get_paths(valid_images);
     char **paths = (char **)list_to_array(plist);
