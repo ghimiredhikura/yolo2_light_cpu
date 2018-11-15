@@ -1,24 +1,12 @@
 #include "additionally.h"    // some definitions from: im2col.h, blas.h, list.h, utils.h, activations.h, tree.h, layer.h, network.h
 // softmax_layer.h, reorg_layer.h, route_layer.h, region_layer.h, maxpool_layer.h, convolutional_layer.h
 
-#define GEMMCONV
-
-//#define SSE41
-//#undef AVX
 
 #define W_MAX_VAL (256/2 - 1)    // 7-bit (1-bit sign)
 #define I_MAX_VAL (256/2 - 1)    // 7-bit (1-bit sign)
 #define R_MAX_VAL (256*256/2 - 1)    // 31-bit (1-bit sign)
 
-
 #define R_MULT (32)    // 4 - 32
-
-/*
-// from: box.h
-typedef struct {
-    float x, y, w, h;
-} box;
-*/
 
 int max_abs(int src, int max_val)
 {
@@ -208,263 +196,6 @@ void im2col_cpu_int8(int8_t* data_im,
     }
 }
 
-// Use to enable AVX or SSE41
-//#define AVX    // 1.35 sec (0.8 FPS) 2.3x - GCC -mavx -mavx2 -mfma -ffp-contract=fast
-//#define SSE41    // 1.55 sec (0.7 FPS) 2x
-// default 3.10 sec (0.3 FPS)
-
-
-#if defined(AVX) || defined(SSE41)
-
-#ifdef _WIN64
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
-
-#include <ammintrin.h>
-#include <immintrin.h>
-#include <smmintrin.h>
-#include <emmintrin.h>
-// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=broad&expand=561
-#endif    // AVX or SSE41
-
-
-#if defined(AVX)
-
-
-__m256i _mm256_div_epi16(const __m256i va, const int b)
-{
-    __m256i vb = _mm256_set1_epi16(32768 / b);
-    return _mm256_mulhrs_epi16(va, vb);
-}
-
-#define INTERMEDIATE_MULT 15    // 8 or 15
-#define FINAL_MULT (R_MULT / INTERMEDIATE_MULT)
-
-// 0.89 sec
-void gemm_nn_int8_int16_conv16(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int16_t *C, int ldc)
-{
-    __m256i res;
-    __m256i a, b, d;
-    __m128i tmp128;
-    __m256i div256 = _mm256_set1_epi16(INTERMEDIATE_MULT);
-
-    int16_t *c_tmp = calloc(N, sizeof(int16_t));
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            register int16_t A_PART = ALPHA*A[i*lda + k];
-            a = _mm256_set1_epi16(A_PART);
-            for (j = 0; j < N - 32; j += 32) {
-                int index = k*ldb + j;
-                d = _mm256_loadu_si256((__m256i*)&B[index]);
-
-
-                tmp128 = _mm256_extractf128_si256(d, 0);// get low 128 bit
-                b = _mm256_cvtepi8_epi16(tmp128);        // int8 -> int16
-
-                b = _mm256_mullo_epi16(a, b);    // B = A * B
-
-                b = _mm256_div_epi16(b, INTERMEDIATE_MULT);    // B = (A * B) / INTERMEDIATE_MULL
-
-                res = _mm256_loadu_si256(&c_tmp[j]);        // load temp C
-                res = _mm256_add_epi16(b, res);                // (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j], res);        // store temp C
-
-
-                tmp128 = _mm256_extractf128_si256(d, 1);// get high 128 bit
-                b = _mm256_cvtepi8_epi16(tmp128);        // int8 -> int16 (for low 8 bytes)
-
-                b = _mm256_mullo_epi16(a, b);    // B = A * B
-
-                b = _mm256_div_epi16(b, INTERMEDIATE_MULT);    // B = (A * B) / INTERMEDIATE_MULL
-
-                res = _mm256_loadu_si256(&c_tmp[j + 16]);    // Load next temp C
-                res = _mm256_add_epi16(b, res);                // (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j + 16], res);    // store temp C
-
-                                                            //c_tmp[j] += A_PART*B[k*ldb + j];
-                                                            //C[i*ldc + j] += max_abs(A_PART*B[k*ldb + j] / (INTERMEDIATE_MULL), (256 * 128 - 1));
-            }
-
-            int prev_end = (N % 32 == 0) ? (N - 32) : (N / 32) * 32;
-            for (j = prev_end; j < N; ++j) {
-                c_tmp[j] += A_PART*B[k*ldb + j] / (INTERMEDIATE_MULT);
-            }
-        }
-        for (j = 0; j < N; ++j) {
-            C[i*ldc + j] += (c_tmp[j] / FINAL_MULT);
-            c_tmp[j] = 0;
-        }
-    }
-    free(c_tmp);
-}
-
-
-// 1.15 sec
-void gemm_nn_int8_int16(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int16_t *C, int ldc)
-{
-    __m256i multyplied_i32, res;
-    __m256i a, b, d;
-    __m128i tmp128;
-
-    int32_t *c_tmp = calloc(N, sizeof(int32_t));
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            register int16_t A_PART = ALPHA*A[i*lda + k];
-            a = _mm256_set1_epi16(A_PART);
-            for (j = 0; j < N - 32; j += 32) {
-                int index = k*ldb + j;
-                d = _mm256_loadu_si256((__m256i*)&B[index]);
-
-                tmp128 = _mm256_extractf128_si256(d, 0);// get low 128 bit
-                b = _mm256_cvtepi8_epi16(tmp128);        // int8 -> int16
-
-                b = _mm256_mullo_epi16(a, b);    // B = A * B
-
-                tmp128 = _mm256_extractf128_si256(b, 0);        // get low 128 bit
-                multyplied_i32 = _mm256_cvtepi16_epi32(tmp128);    // int16 -> int32
-
-                res = _mm256_loadu_si256(&c_tmp[j]);        // load temp C
-                res = _mm256_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j], res);        // store temp C
-
-                tmp128 = _mm256_extractf128_si256(b, 1);        // get high 128 bit
-                multyplied_i32 = _mm256_cvtepi16_epi32(tmp128);    // int16 -> int32
-
-                res = _mm256_loadu_si256(&c_tmp[j + 8]);    // Load next temp C
-                res = _mm256_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j + 8], res);    // store temp C
-
-                tmp128 = _mm256_extractf128_si256(d, 1);// get high 128 bit
-                b = _mm256_cvtepi8_epi16(tmp128);        // int8 -> int16 (for low 8 bytes)
-
-                b = _mm256_mullo_epi16(a, b);    // B = A * B
-
-                tmp128 = _mm256_extractf128_si256(b, 0);        // get low 128 bit
-                multyplied_i32 = _mm256_cvtepi16_epi32(tmp128);    // int16 -> int32
-
-                res = _mm256_loadu_si256(&c_tmp[j + 16]);    // Load next temp C
-                res = _mm256_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j + 16], res);    // store temp C
-
-                tmp128 = _mm256_extractf128_si256(b, 1);        // get high 128 bit
-                multyplied_i32 = _mm256_cvtepi16_epi32(tmp128);    // int16 -> int32
-
-                res = _mm256_loadu_si256(&c_tmp[j + 24]);    // Load next temp C
-                res = _mm256_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm256_storeu_si256(&c_tmp[j + 24], res);    // store temp C
-
-                                                            //c_tmp[j] += A_PART*B[k*ldb + j];
-                                                            //C[i*ldc + j] += max_abs(A_PART*B[k*ldb + j] / (32), (256 * 128 - 1));
-            }
-
-            int prev_end = (N % 32 == 0) ? (N - 32) : (N / 32) * 32;
-            for (j = prev_end; j < N; ++j) {
-                c_tmp[j] += A_PART*B[k*ldb + j];
-            }
-        }
-        for (j = 0; j < N; ++j) {
-            C[i*ldc + j] += max_abs(c_tmp[j] / (R_MULT), (256 * 128 - 1));
-            c_tmp[j] = 0;
-        }
-        //for (j = 0; j < N; ++j) C[i*ldc + j] += c_tmp[j] / (R_MULT);
-    }
-    free(c_tmp);
-}
-
-#elif defined(SSE41)
-// 1.3 sec
-void gemm_nn_int8_int16(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int16_t *C, int ldc)
-{
-    __m128i multyplied_i32, res;
-    __m128i a, b, d;
-    //c = _mm_set1_epi16(32);
-
-    int32_t *c_tmp = calloc(N, sizeof(int32_t));
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            register int16_t A_PART = ALPHA*A[i*lda + k];
-            a = _mm_set1_epi16(A_PART);
-            for (j = 0; j < N - 16; j += 16) {
-                int index = k*ldb + j;
-                d = _mm_loadu_si128((__m128i*)&B[index]);
-
-                b = _mm_cvtepi8_epi16(d);    // int8 -> int16
-
-                b = _mm_mullo_epi16(a, b);    // B = A * B
-
-                multyplied_i32 = _mm_cvtepi16_epi32(b);    // int16 -> int32
-
-                res = _mm_loadu_si128(&c_tmp[j]);        // load temp C
-                res = _mm_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm_store_si128(&c_tmp[j], res);        // store temp C
-
-                b = _mm_srli_si128(b, 8);                // Shift Right -> 8 bytes
-                multyplied_i32 = _mm_cvtepi16_epi32(b);    // int16 -> int32
-
-                res = _mm_loadu_si128(&c_tmp[j + 4]);    // Load next temp C
-                res = _mm_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm_store_si128(&c_tmp[j + 4], res);    // store temp C
-
-                d = _mm_srli_si128(d, 8);    // Shift Right -> 8 bytes
-                b = _mm_cvtepi8_epi16(d);    // int8 -> int16 (for low 8 bytes)
-
-                b = _mm_mullo_epi16(a, b);    // B = A * B
-
-                multyplied_i32 = _mm_cvtepi16_epi32(b);    // int16 -> int32
-
-                res = _mm_loadu_si128(&c_tmp[j + 8]);    // Load next temp C
-                res = _mm_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm_store_si128(&c_tmp[j + 8], res);    // store temp C
-
-                b = _mm_srli_si128(b, 8);                // Shift Right -> 8 bytes
-                multyplied_i32 = _mm_cvtepi16_epi32(b);    // int16 -> int32
-
-                res = _mm_loadu_si128(&c_tmp[j + 12]);    // Load next temp C
-                res = _mm_add_epi32(multyplied_i32, res);// (A*B) + C
-                _mm_store_si128(&c_tmp[j + 12], res);    // store temp C
-
-                                                        //c_tmp[j] += A_PART*B[k*ldb + j];
-                                                        //C[i*ldc + j] += max_abs(A_PART*B[k*ldb + j] / (32), (256 * 128 - 1));
-            }
-
-            int prev_end = (N % 16 == 0) ? (N - 16) : (N / 16) * 16;
-            for (j = prev_end; j < N; ++j) {
-                c_tmp[j] += A_PART*B[k*ldb + j];
-            }
-        }
-        for (j = 0; j < N; ++j) {
-            C[i*ldc + j] += max_abs(c_tmp[j] / (R_MULT), (256 * 128 - 1));
-            c_tmp[j] = 0;
-        }
-        //for (j = 0; j < N; ++j) C[i*ldc + j] += c_tmp[j] / (R_MULT);
-    }
-    free(c_tmp);
-}
-
-void gemm_nn_int8_int16_conv16(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int16_t *C, int ldc)
-{
-    printf(" gemm_nn_int8_int16_conv16() isn't implemented for SSE4.1 \n");
-}
-
-#else
-
 // 2.9 sec
 void gemm_nn_int8_int16(int M, int N, int K, int8_t ALPHA,
     int8_t *A, int lda,
@@ -521,7 +252,6 @@ void gemm_nn_int8_int16_conv16(int M, int N, int K, int8_t ALPHA,
 {
     printf(" gemm_nn_int8_int16_conv16() isn't implemented \n");
 }
-#endif    // SSE41 or AVX
 
 
 void forward_convolutional_layer_q(layer l, network_state state)
@@ -631,7 +361,6 @@ void forward_convolutional_layer_q(layer l, network_state state)
 }
 
 
-
 // 4 layers in 1: convolution, batch-normalization, BIAS and activation
 void forward_convolutional_layer_q_old(layer l, network_state state, int return_float)
 {
@@ -666,9 +395,7 @@ void forward_convolutional_layer_q_old(layer l, network_state state, int return_
     // https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBiasActivationForward
     ///////////////////////////////////
 
-
-                                                            // 1. Convolution !!!
-#ifndef GEMMCONV
+    // 1. Convolution !!!
     int fil;
     // filter index
 #pragma omp parallel for      // "omp parallel for" - automatic parallelization of loop by using OpenMP
@@ -721,36 +448,6 @@ void forward_convolutional_layer_q_old(layer l, network_state state, int return_
                     //if (fabs(output_q[output_index]) > 65535) printf(" fabs(output_q[output_index]) > 65535 \n");
                 }
     }
-#else
-    int fil;
-
-    // cuDNN: y = conv(x)
-    int m = l.n;
-    int k = l.size*l.size*l.c;
-    int n = out_h*out_w;
-    int8_t *a = l.weights_int8;
-    int8_t *b = (int8_t *)state.workspace;
-    conv_t *c = output_q;    // int16_t
-
-    // convolution as GEMM (as part of BLAS)
-    //for (i = 0; i < l.batch; ++i) {
-    im2col_cpu_int8(state.input_int8, l.c, l.h, l.w, l.size, l.stride, l.pad, b);    // here
-    //gemm_nn_int8_int16(m, n, k, 1, a, k, b, n, c, n);    // single-thread gemm
-
-    int t;    // multi-thread gemm
-#pragma omp parallel for
-    for (t = 0; t < m; ++t) {
-        gemm_nn_int8_int16(1, n, k, 1, a + t*k, k, b, n, c + t*n, n);
-        //gemm_nn_int8_int16_conv16(1, n, k, 1, a + t*k, k, b, n, c + t*n, n);
-        //gemm_nn_int8_int32(1, n, k, 1, a + t*k, k, b, n, c + t*n, n); conv_t should be int32_t
-    }
-    //}
-#endif
-
-    // cuDNN: y = alpha1 * conv(x)
-    //for (i = 0; i < l.outputs; ++i) {
-    //    output_q[i] = output_q[i] * l.output_multipler;    // cuDNN: alpha1
-    //}
 
     for (fil = 0; fil < l.n; ++fil) {
         for (j = 0; j < out_size; ++j) {
@@ -758,23 +455,12 @@ void forward_convolutional_layer_q_old(layer l, network_state state, int return_
         }
     }
 
-    // cuDNN: y = alpha1 * conv(x) + bias
     for (fil = 0; fil < l.n; ++fil) {
         for (j = 0; j < out_size; ++j) {
             output_q[fil*out_size + j] += l.biases_quant[fil];
         }
     }
 
-    //for (i = 0; i < l.inputs; ++i) state.input[i] = state.input_int8[i];
-    //char buff[1024];
-    //sprintf(buff, "inputs - filters %d", l.n);
-    //draw_distribution(state.input, l.inputs, buff);
-
-    //for (i = 0; i < l.outputs; ++i)    l.output[i] = (float)output_q[i];
-    //draw_distribution(l.output, l.outputs, "output");
-
-
-    // cuDNN: y = act ( alpha1 * conv(x) + bias )
     // bias is always FLOAT
     if (l.activation == LEAKY) {
         for (i = 0; i < l.n*out_size; ++i) {
@@ -782,7 +468,6 @@ void forward_convolutional_layer_q_old(layer l, network_state state, int return_
         }
     }
 
-    // cuDNN: y = act ( alpha1 * conv(x) + alpha2 * z + bias ), where: alpha2=0, z=NULL
     if (return_float) {
         // y - FLOAT, x,w - X_INT8 / X_INT8x4
         for (i = 0; i < l.outputs; ++i) {
@@ -914,9 +599,6 @@ void forward_reorg_layer_q(const layer l, network_state state)
     }
 }
 
-
-
-
 // ---- region layer ----
 
 static void softmax_q(float *input, int n, float temp, float *output)
@@ -1022,8 +704,6 @@ void forward_region_layer_q(const layer l, network_state state)
 
 }
 
-
-
 void yolov2_forward_network_q(network net, network_state state)
 {
     state.workspace = net.workspace;
@@ -1043,23 +723,23 @@ void yolov2_forward_network_q(network net, network_state state)
             //printf("\n MAXPOOL \t\t l.size = %d  \n", l.size);
         }
         else if (l.type == ROUTE) {
-            forward_route_layer_cpu(l, state);
+            //forward_route_layer_cpu(l, state);
             //printf("\n ROUTE \t\t\t l.n = %d  \n", l.n);
         }
         else if (l.type == REORG) {
-            forward_reorg_layer_cpu(l, state);
+            //forward_reorg_layer_cpu(l, state);
             //printf("\n REORG \n");
         }
         else if (l.type == UPSAMPLE) {
-            forward_upsample_layer_cpu(l, state);
+            //forward_upsample_layer_cpu(l, state);
             //printf("\n UPSAMPLE \n");
         }
         else if (l.type == SHORTCUT) {
-            forward_shortcut_layer_cpu(l, state);
+            //forward_shortcut_layer_cpu(l, state);
             //printf("\n SHORTCUT \n");
         }
         else if (l.type == YOLO) {
-            forward_yolo_layer_cpu(l, state);
+            //forward_yolo_layer_cpu(l, state);
             //printf("\n YOLO \n");
         }
         else if (l.type == REGION) {
@@ -1167,14 +847,6 @@ float *network_predict_quantized(network net, float *input)
     state.truth = 0;
     state.train = 0;
     state.delta = 0;
-    /*/
-    int k;
-    for (k = 0; k < net.w*net.h*net.c; ++k) {
-        //int16_t src = lround(state.input[k] * net.layers[0].input_quant_multipler);
-        int16_t src = state.input[k] * net.layers[0].input_quant_multipler;
-        state.input_int8[k] = max_abs(src, I_MAX_VAL);
-    }
-    */
 
     yolov2_forward_network_q(net, state);    // network on CPU
                                             //float *out = get_network_output(net);
@@ -1484,11 +1156,4 @@ void quantinization_and_get_multipliers(network net)
             printf(" Skip layer: %d \n", l->type);
         }
     }
-
-
-#ifdef GPU
-    // init weights and cuDNN for quantized IINT8x4
-    init_gpu_int8x4(net);
-#endif //GPU
-
 }

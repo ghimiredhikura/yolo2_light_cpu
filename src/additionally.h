@@ -142,15 +142,6 @@ extern "C" {
         return 0;
     }
 
-    static void activate_array(float *x, const int n, const ACTIVATION a)
-    {
-        int i;
-        for (i = 0; i < n; ++i) {
-            x[i] = activate(x[i], a);
-        }
-    }
-
-
     // -------------- XNOR-net ------------
 
     // binarize Weights
@@ -757,13 +748,10 @@ extern "C" {
     float *network_predict_cpu(network net, float *input);
 
     // calculate mAP
-    void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, int quantized, const float iou_thresh);
+    //void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, int quantized, const float iou_thresh);
 
     // fuse convolutional and batch_norm weights into one convolutional-layer
     void yolov2_fuse_conv_batchnorm(network net);
-
-    // calibration input for int8 quantinization
-    float *network_calibrate_cpu(network net, float *input);
 
     // -------------- yolov2_forward_network_quantized.c --------------------
 
@@ -783,7 +771,7 @@ extern "C" {
     float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin);
 
     // additionally.c
-    void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, int input_calibration);
+//    void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, int input_calibration);
 
     // additionally.c
     detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter);
