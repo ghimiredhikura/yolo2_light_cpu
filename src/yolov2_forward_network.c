@@ -80,9 +80,6 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
                             sum += state.input[input_index] * l.weights[weights_index];
                         }
                     }
-                    // l.output[filters][width][height] +=
-                    //        state.input[channels][width][height] *
-                    //        l.weights[filters][channels][filter_width][filter_height];
                     l.output[output_index] += sum;
                 }
     }
@@ -119,65 +116,19 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
 	    }
     }
 
-    // 4. Activation function (LEAKY or LINEAR)
-    //if (l.activation == LEAKY) {
-    //    for (i = 0; i < l.n*out_size; ++i) {
-    //        l.output[i] = leaky_activate(l.output[i]);
-    //    }
-    //}
-    //activate_array_cpu_custom(l.output, l.n*out_size, l.activation);
     activate_array_cpu_custom(l.output, l.outputs*l.batch, l.activation);
-
 }
 
 
 // MAX pooling layer
 void forward_maxpool_layer_cpu(const layer l, network_state state)
 {
-    if (!state.train) {
+   //if (!state.train) 
+   {
         forward_maxpool_layer_avx(state.input, l.output, l.indexes, l.size, l.w, l.h, l.out_w, l.out_h, l.c, l.pad, l.stride, l.batch);
-        return;
-    }
-
-    int b, i, j, k, m, n;
-    const int w_offset = -l.pad;
-    const int h_offset = -l.pad;
-
-    const int h = l.out_h;
-    const int w = l.out_w;
-    const int c = l.c;
-
-    // batch index
-    for (b = 0; b < l.batch; ++b) {
-        // channel index
-        for (k = 0; k < c; ++k) {
-            // y - input
-            for (i = 0; i < h; ++i) {
-                // x - input
-                for (j = 0; j < w; ++j) {
-                    int out_index = j + w*(i + h*(k + c*b));
-                    float max = -FLT_MAX;
-                    int max_i = -1;
-                    // pooling x-index
-                    for (n = 0; n < l.size; ++n) {
-                        // pooling y-index
-                        for (m = 0; m < l.size; ++m) {
-                            int cur_h = h_offset + i*l.stride + n;
-                            int cur_w = w_offset + j*l.stride + m;
-                            int index = cur_w + l.w*(cur_h + l.h*(k + b*l.c));
-                            int valid = (cur_h >= 0 && cur_h < l.h &&
-                                cur_w >= 0 && cur_w < l.w);
-                            float val = (valid != 0) ? state.input[index] : -FLT_MAX;
-                            max_i = (val > max) ? index : max_i;    // get max index
-                            max = (val > max) ? val : max;            // get max value
-                        }
-                    }
-                    l.output[out_index] = max;        // store max value
-                    l.indexes[out_index] = max_i;    // store max index
-                }
-            }
-        }
-    }
+		//printf("check here\n");
+        //return;
+   }  
 }
 
 // ---- region layer ----
@@ -199,22 +150,6 @@ static void softmax_cpu(float *input, int n, float temp, float *output)
         output[i] /= sum;
     }
 }
-
-static void softmax_tree(float *input, int batch, int inputs, float temp, tree *hierarchy, float *output)
-{
-    int b;
-    for (b = 0; b < batch; ++b) {
-        int i;
-        int count = 0;
-        for (i = 0; i < hierarchy->groups; ++i) {
-            int group_size = hierarchy->group_size[i];
-            softmax_cpu(input + b*inputs + count, group_size, temp, output + b*inputs + count);
-            count += group_size;
-        }
-    }
-}
-// ---
-
 
 // Region layer - just change places of array items, then do logistic_activate and softmax
 void forward_region_layer_cpu(const layer l, network_state state)
@@ -261,16 +196,8 @@ void forward_region_layer_cpu(const layer l, network_state state)
         }
     }
 
-
-    if (l.softmax_tree) {    // Yolo 9000
-        for (b = 0; b < l.batch; ++b) {
-            for (i = 0; i < l.h*l.w*l.n; ++i) {
-                int index = size*i + b*l.outputs;
-                softmax_tree(l.output + index + 5, 1, 0, 1, l.softmax_tree, l.output + index + 5);
-            }
-        }
-    }
-    else if (l.softmax) {    // Yolo v2
+	//else if (l.softmax) 
+	{    // Yolo v2
         // softmax activation only for Classes probability
         for (b = 0; b < l.batch; ++b) {
             // for each item (x, y, anchor-index)
@@ -391,32 +318,8 @@ void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, bo
 
             int class_index = index * (l.classes + 5) + 5;
 
-            // Yolo 9000 or Yolo v2
-            if (l.softmax_tree) {
-                // Yolo 9000
-                hierarchy_predictions(predictions + class_index, l.classes, l.softmax_tree, 0);
-                int found = 0;
-                if (map) {
-                    for (j = 0; j < 200; ++j) {
-                        float prob = scale*predictions[class_index + map[j]];
-                        probs[index][j] = (prob > thresh) ? prob : 0;
-                    }
-                }
-                else {
-                    for (j = l.classes - 1; j >= 0; --j) {
-                        if (!found && predictions[class_index + j] > .5) {
-                            found = 1;
-                        }
-                        else {
-                            predictions[class_index + j] = 0;
-                        }
-                        float prob = predictions[class_index + j];
-                        probs[index][j] = (scale > thresh) ? prob : 0;
-                    }
-                }
-            }
-            else
-            {
+            //else
+			{
                 // Yolo v2
                 for (j = 0; j < l.classes; ++j) {
                     float prob = scale*predictions[class_index + j];    // prob = IoU(box, object) = t0 * class-probability

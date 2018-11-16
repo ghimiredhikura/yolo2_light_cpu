@@ -1,5 +1,4 @@
 #include "additionally.h"
-#include "gpu.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -52,8 +51,6 @@ void im2col_cpu(float* data_im,
         }
     }
 }
-
-// -------------- my own --------------
 
 // fuse convolutional and batch_norm weights into one convolutional-layer
 void yolov2_fuse_conv_batchnorm(network net)
@@ -119,53 +116,6 @@ static inline unsigned char xnor(unsigned char a, unsigned char b) {
     return !(a^b);
 }
 
-// INT-32
-static inline uint32_t get_bit_int32(uint32_t const*const src, size_t index) {
-    size_t src_i = index / 32;
-    int src_shift = index % 32;
-    unsigned char val = (src[src_i] & (1 << src_shift)) > 0;
-    return val;
-}
-
-static inline uint32_t xnor_int32(uint32_t a, uint32_t b) {
-    return ~(a^b);
-}
-
-static inline uint64_t xnor_int64(uint64_t a, uint64_t b) {
-    return ~(a^b);
-}
-
-
-static inline uint32_t fill_bit_int32(char src) {
-    if (src == 0) return 0x00000000;
-    else return  0xFFFFFFFF;
-}
-
-static inline uint64_t fill_bit_int64(char src) {
-    if (src == 0) return 0x0000000000000000;
-    else return  0xFFFFFFFFFFFFFFFF;
-}
-
-void binary_int32_printf(uint32_t src) {
-    int i;
-    for (i = 0; i < 32; ++i) {
-        if (src & 1) printf("1");
-        else printf("0");
-        src = src >> 1;
-    }
-    printf("\n");
-}
-
-void binary_int64_printf(uint64_t src) {
-    int i;
-    for (i = 0; i < 64; ++i) {
-        if (src & 1) printf("1");
-        else printf("0");
-        src = src >> 1;
-    }
-    printf("\n");
-}
-
 void get_mean_array(float *src, size_t size, size_t filters, float *mean_arr) {
     size_t i, counter;
     counter = 0;
@@ -224,8 +174,6 @@ void calculate_binary_weights(network net)
             }
         }
     }
-    //printf("\n calculate_binary_weights Done! \n");
-
 }
 
 static inline void set_bit(unsigned char *const dst, size_t index) {
@@ -247,7 +195,6 @@ uint8_t reverse_8_bit(uint8_t a) {
 
 uint32_t reverse_32_bit(uint32_t a)
 {
-    // unsigned int __rbit(unsigned int val) // for ARM    //__asm__("rbit %0, %1\n" : "=r"(output) : "r"(input));
     return (reverse_8_bit(a >> 24) << 0) |
         (reverse_8_bit(a >> 16) << 8) |
         (reverse_8_bit(a >> 8) << 16) |
@@ -259,15 +206,6 @@ uint32_t reverse_32_bit(uint32_t a)
 void transpose32_optimized(uint32_t A[32]) {
     int j, k;
     unsigned m, t;
-
-    //m = 0x0000FFFF;
-    //for (j = 16; j != 0; j = j >> 1, m = m ^ (m << j)) {
-    //    for (k = 0; k < 32; k = (k + j + 1) & ~j) {
-    //        t = (A[k] ^ (A[k + j] >> j)) & m;
-    //        A[k] = A[k] ^ t;
-    //        A[k + j] = A[k + j] ^ (t << j);
-    //    }
-    //}
 
     j = 16;
     m = 0x0000FFFF;
@@ -320,153 +258,12 @@ void transpose_bin(uint32_t *A, uint32_t *B, const int n, const int m,
             int a_index = i*lda + j;
             int b_index = j*ldb + i;
             transpose_32x32_bits_reversed_diagonale(&A[a_index / 32], &B[b_index / 32], lda / 32, ldb / 32);
-            //transpose_32x32_bits_my(&A[a_index/32], &B[b_index/32], lda/32, ldb/32);
         }
         for (; j < m; ++j) {
             if (get_bit(A, i*lda + j)) set_bit(B, j*ldb + i);
         }
     }
 }
-
-// -------------- blas.c --------------
-
-void gemm_nn(int M, int N, int K, float ALPHA,
-    float *A, int lda,
-    float *B, int ldb,
-    float *C, int ldc)
-{
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            register float A_PART = ALPHA*A[i*lda + k];
-            for (j = 0; j < N; ++j) {
-                C[i*ldc + j] += A_PART*B[k*ldb + j];
-            }
-        }
-    }
-}
-
-
-//From Berkeley Vision's Caffe!
-//https://github.com/BVLC/caffe/blob/master/LICENSE
-void im2col_cpu_custom(float* data_im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float* data_col)
-{
-    im2col_cpu(data_im, channels, height, width, ksize, stride, pad, data_col);
-}
-
-
-//From Berkeley Vision's Caffe!
-//https://github.com/BVLC/caffe/blob/master/LICENSE
-void im2col_cpu_custom_bin(float* data_im,
-    int channels, int height, int width,
-    int ksize, int stride, int pad, float* data_col, int bit_align)
-{
-    int c;
-    const int height_col = (height + 2 * pad - ksize) / stride + 1;
-    const int width_col = (width + 2 * pad - ksize) / stride + 1;
-    const int channels_col = channels * ksize * ksize;
-
-    // optimized version
-    if (height_col == height && width_col == width && stride == 1 && pad == 1)
-    {
-        int new_ldb = bit_align;
-
-        #pragma omp parallel for
-        for (c = 0; c < channels_col; ++c) {
-            int h, w;
-            int w_offset = c % ksize;
-            int h_offset = (c / ksize) % ksize;
-            int c_im = c / ksize / ksize;
-            for (h = pad; h < height_col - pad; ++h) {
-                for (w = pad; w < width_col - pad - 8; w += 1) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    float val = data_im[im_col + width*(im_row + height*c_im)];
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-
-                for (; w < width_col - pad; ++w) {
-                    int im_row = h_offset + h - pad;
-                    int im_col = w_offset + w - pad;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = data_im[im_col + width*(im_row + height*c_im)];
-                    float val = data_im[im_col + width*(im_row + height*c_im)];
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                w = 0;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                w = width_col - 1;
-                for (h = 0; h < height_col; ++h) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                h = 0;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-
-            {
-                h = height_col - 1;
-                for (w = 0; w < width_col; ++w) {
-                    int im_row = h_offset + h;
-                    int im_col = w_offset + w;
-                    //int col_index = (c * height_col + h) * width_col + w;
-                    int col_index = c * new_ldb + h * width_col + w;
-
-                    //data_col[col_index] = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    float val = im2col_get_pixel(data_im, height, width, channels, im_row, im_col, c_im, pad);
-                    if (val > 0) set_bit(data_col, col_index);
-                }
-            }
-        }
-    }
-    else {
-        printf("\n Error: is no non-optimized version \n");
-        //im2col_cpu(data_im, channels, height, width, ksize, stride, pad, data_col); // must be aligned for transpose after float_to_bin
-        // float_to_bit(b, t_input, src_size);
-        // transpose_bin(t_input, *t_bit_input, k, n, bit_align, new_ldb, 8);
-    }
-}
-
 
 void activate_array_cpu_custom(float *x, const int n, const ACTIVATION a)
 {
@@ -516,57 +313,6 @@ void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, i
     }
 }
 
-static inline int popcnt_64(uint64_t val64) {
-#ifdef WIN32  // Windows
-#ifdef _WIN64 // Windows 64-bit
-    int tmp_count = __popcnt64(val64);
-#else         // Windows 32-bit
-    int tmp_count = __popcnt(val64);
-    tmp_count += __popcnt(val64 >> 32);
-#endif
-#else   // Linux
-#ifdef __x86_64__  // Linux 64-bit
-    int tmp_count = __builtin_popcountll(val64);
-#else  // Linux 32-bit
-    int tmp_count = __builtin_popcount(val64);
-    tmp_count += __builtin_popcount(val64);
-#endif
-#endif
-    return tmp_count;
-}
-
-
-void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
-    unsigned char *A, int lda,
-    unsigned char *B, int ldb,
-    float *C, int ldc, float *mean_arr)
-{
-    int i, j, k, h;
-
-    #pragma omp parallel for
-    for (i = 0; i < M; ++i) {   // l.n - filters [16 - 55 - 1024]
-        float mean_val = mean_arr[i];
-
-        for (j = 0; j < N; ++j) { // out_h*out_w - one channel output size [169 - 173056]
-            int count = 0;
-
-            for (k = 0; k < K; k += 64) {   // l.size*l.size*l.c - one filter size [27 - 9216]
-                uint64_t a_bit64 = *((uint64_t *)(A + (i*lda + k) / 8));
-                uint64_t b_bit64 = *((uint64_t *)(B + (j*ldb + k) / 8));
-                uint64_t c_bit64 = xnor_int64(a_bit64, b_bit64);
-
-                int tmp_count = popcnt_64(c_bit64);
-
-                if (K - k < 64)  tmp_count = tmp_count - (64 - (K - k));    // remove extra bits
-                count += tmp_count;
-                //binary_int64_printf(c_bit64);
-                //printf(", count = %d \n\n", tmp_count);
-            }
-
-            C[i*ldc + j] = (2 * count - K) * mean_val;
-        }
-    }
-}
 
 void float_to_bit(float *src, unsigned char *dst, size_t size)
 {
@@ -596,12 +342,6 @@ void float_to_bit(float *src, unsigned char *dst, size_t size)
         dst[i / 8] = dst_tmp;
     }
     free(byte_arr);
-}
-
-void fill_cpu(int N, float ALPHA, float *X, int INCX)
-{
-    int i;
-    for (i = 0; i < N; ++i) X[i*INCX] = ALPHA;
 }
 
 // -------------- utils.c --------------
@@ -659,22 +399,6 @@ char *fgetl(FILE *fp)
     if (line[curr - 1] == '\n') line[curr - 1] = '\0';
 
     return line;
-}
-
-// utils.c
-int *read_map(char *filename)
-{
-    int n = 0;
-    int *map = 0;
-    char *str;
-    FILE *file = fopen(filename, "r");
-    if (!file) file_error(filename);
-    while ((str = fgetl(file))) {
-        ++n;
-        map = realloc(map, n * sizeof(int));
-        map[n - 1] = atoi(str);
-    }
-    return map;
 }
 
 // utils.c
@@ -857,109 +581,12 @@ int max_index(float *a, int n)
 }
 
 // utils.c
-// From http://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-float rand_normal()
-{
-    static int haveSpare = 0;
-    static double rand1, rand2;
-
-    if (haveSpare)
-    {
-        haveSpare = 0;
-        return sqrt(rand1) * sin(rand2);
-    }
-
-    haveSpare = 1;
-
-    rand1 = rand() / ((double)RAND_MAX);
-    if (rand1 < 1e-100) rand1 = 1e-100;
-    rand1 = -2 * log(rand1);
-    rand2 = (rand() / ((double)RAND_MAX)) * TWO_PI;
-
-    return sqrt(rand1) * cos(rand2);
-}
-
-// utils.c
 void free_ptrs(void **ptrs, int n)
 {
     int i;
     for (i = 0; i < n; ++i) free(ptrs[i]);
     free(ptrs);
 }
-
-
-// -------------- tree.c --------------
-
-// tree.c
-void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves)
-{
-    int j;
-    for (j = 0; j < n; ++j) {
-        int parent = hier->parent[j];
-        if (parent >= 0) {
-            predictions[j] *= predictions[parent];
-        }
-    }
-    if (only_leaves) {
-        for (j = 0; j < n; ++j) {
-            if (!hier->leaf[j]) predictions[j] = 0;
-        }
-    }
-}
-
-// tree.c
-tree *read_tree(char *filename)
-{
-    tree t = { 0 };
-    FILE *fp = fopen(filename, "r");
-
-    char *line;
-    int last_parent = -1;
-    int group_size = 0;
-    int groups = 0;
-    int n = 0;
-    while ((line = fgetl(fp)) != 0) {
-        char *id = calloc(256, sizeof(char));
-        int parent = -1;
-        sscanf(line, "%s %d", id, &parent);
-        t.parent = realloc(t.parent, (n + 1) * sizeof(int));
-        t.parent[n] = parent;
-
-        t.name = realloc(t.name, (n + 1) * sizeof(char *));
-        t.name[n] = id;
-        if (parent != last_parent) {
-            ++groups;
-            t.group_offset = realloc(t.group_offset, groups * sizeof(int));
-            t.group_offset[groups - 1] = n - group_size;
-            t.group_size = realloc(t.group_size, groups * sizeof(int));
-            t.group_size[groups - 1] = group_size;
-            group_size = 0;
-            last_parent = parent;
-        }
-        t.group = realloc(t.group, (n + 1) * sizeof(int));
-        t.group[n] = groups;
-        ++n;
-        ++group_size;
-    }
-    ++groups;
-    t.group_offset = realloc(t.group_offset, groups * sizeof(int));
-    t.group_offset[groups - 1] = n - group_size;
-    t.group_size = realloc(t.group_size, groups * sizeof(int));
-    t.group_size[groups - 1] = group_size;
-    t.n = n;
-    t.groups = groups;
-    t.leaf = calloc(n, sizeof(int));
-    int i;
-    for (i = 0; i < n; ++i) t.leaf[i] = 1;
-    for (i = 0; i < n; ++i) if (t.parent[i] >= 0) t.leaf[t.parent[i]] = 0;
-
-    fclose(fp);
-    tree *tree_ptr = calloc(1, sizeof(tree));
-    *tree_ptr = t;
-    //error(0);
-    return tree_ptr;
-}
-
 
 // -------------- list.c --------------
 
@@ -1020,17 +647,6 @@ void free_list(list *l)
     free_node(l->front);
     free(l);
 }
-
-// list.c
-char **get_labels(char *filename)
-{
-    list *plist = get_paths(filename);
-    char **labels = (char **)list_to_array(plist);
-    free_list(plist);
-    return labels;
-}
-
-
 
 // -------------- network.c --------------
 
@@ -1154,179 +770,6 @@ softmax_layer make_softmax_layer(int batch, int inputs, int groups)
     l.inputs = inputs;
     l.outputs = inputs;
     l.output = calloc(inputs*batch, sizeof(float));
-    //l.delta = calloc(inputs*batch, sizeof(float));
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_softmax_layer;
-    //l.backward = backward_softmax_layer;
-    return l;
-}
-
-// -------------- upsample_layer.c --------------
-
-// upsample_layer.c
-layer make_upsample_layer(int batch, int w, int h, int c, int stride)
-{
-    layer l = { 0 };
-    l.type = UPSAMPLE;
-    l.batch = batch;
-    l.w = w;
-    l.h = h;
-    l.c = c;
-    l.out_w = w*stride;
-    l.out_h = h*stride;
-    l.out_c = c;
-    if (stride < 0) {
-        stride = -stride;
-        l.reverse = 1;
-        l.out_w = w / stride;
-        l.out_h = h / stride;
-    }
-    l.stride = stride;
-    l.outputs = l.out_w*l.out_h*l.out_c;
-    l.inputs = l.w*l.h*l.c;
-    //l.delta = calloc(l.outputs*batch, sizeof(float));
-    l.output = calloc(l.outputs*batch, sizeof(float));;
-
-    //l.forward = forward_upsample_layer;
-    if (l.reverse) fprintf(stderr, "downsample         %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    else fprintf(stderr, "upsample           %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    return l;
-}
-
-// -------------- shortcut_layer.c --------------
-
-// shortcut.c
-layer make_shortcut_layer(int batch, int index, int w, int h, int c, int w2, int h2, int c2)
-{
-    fprintf(stderr, "Shortcut Layer: %d\n", index);
-    layer l = { 0 };
-    l.type = SHORTCUT;
-    l.batch = batch;
-    l.w = w2;
-    l.h = h2;
-    l.c = c2;
-    l.out_w = w;
-    l.out_h = h;
-    l.out_c = c;
-    l.outputs = w*h*c;
-    l.inputs = l.outputs;
-
-    l.index = index;
-
-    l.output = calloc(l.outputs*batch, sizeof(float));
-    return l;
-}
-
-// -------------- reorg_layer.c --------------
-
-// reorg_layer.c
-layer make_reorg_layer(int batch, int w, int h, int c, int stride, int reverse)
-{
-    layer l = { 0 };
-    l.type = REORG;
-    l.batch = batch;
-    l.stride = stride;
-    l.h = h;
-    l.w = w;
-    l.c = c;
-    if (reverse) {
-        l.out_w = w*stride;
-        l.out_h = h*stride;
-        l.out_c = c / (stride*stride);
-    }
-    else {
-        l.out_w = w / stride;
-        l.out_h = h / stride;
-        l.out_c = c*(stride*stride);
-    }
-    l.reverse = reverse;
-    fprintf(stderr, "reorg              /%2d  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    l.outputs = l.out_h * l.out_w * l.out_c;
-    l.inputs = h*w*c;
-    int output_size = l.out_h * l.out_w * l.out_c * batch;
-    l.output = calloc(output_size, sizeof(float));
-    l.output_int8 = calloc(output_size, sizeof(int8_t));
-    //l.delta = calloc(output_size, sizeof(float));
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_reorg_layer;
-    //l.backward = backward_reorg_layer;
-    return l;
-}
-
-// -------------- route_layer.c --------------
-
-// route_layer.c
-route_layer make_route_layer(int batch, int n, int *input_layers, int *input_sizes)
-{
-    fprintf(stderr, "route ");
-    route_layer l = { 0 };
-    l.type = ROUTE;
-    l.batch = batch;
-    l.n = n;
-    l.input_layers = input_layers;
-    l.input_sizes = input_sizes;
-    int i;
-    int outputs = 0;
-    for (i = 0; i < n; ++i) {
-        fprintf(stderr, " %d", input_layers[i]);
-        outputs += input_sizes[i];
-    }
-    fprintf(stderr, "\n");
-    l.outputs = outputs;
-    l.inputs = outputs;
-    //l.delta = calloc(outputs*batch, sizeof(float));
-    l.output = calloc(outputs*batch, sizeof(float));
-    l.output_int8 = calloc(outputs*batch, sizeof(int8_t));
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_route_layer;
-    //l.backward = backward_route_layer;
-    return l;
-}
-
-// -------------- yolo_layer.c --------------
-
-layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int classes, int max_boxes)
-{
-    int i;
-    layer l = { 0 };
-    l.type = YOLO;
-
-    l.n = n;
-    l.total = total;
-    l.batch = batch;
-    l.h = h;
-    l.w = w;
-    l.c = n*(classes + 4 + 1);
-    l.out_w = l.w;
-    l.out_h = l.h;
-    l.out_c = l.c;
-    l.classes = classes;
-    l.cost = calloc(1, sizeof(float));
-    l.biases = calloc(total * 2, sizeof(float));
-    if (mask) l.mask = mask;
-    else {
-        l.mask = calloc(n, sizeof(int));
-        for (i = 0; i < n; ++i) {
-            l.mask[i] = i;
-        }
-    }
-    //l.bias_updates = calloc(n * 2, sizeof(float));
-    l.outputs = h*w*n*(classes + 4 + 1);
-    l.inputs = l.outputs;
-    l.max_boxes = max_boxes;
-    l.truths = l.max_boxes*(4 + 1);    // 90*(4 + 1);
-    //l.delta = calloc(batch*l.outputs, sizeof(float));
-    l.output = calloc(batch*l.outputs, sizeof(float));
-    for (i = 0; i < total * 2; ++i) {
-        l.biases[i] = .5;
-    }
-
-    fprintf(stderr, "yolo\n");
-    srand(0);
-
     return l;
 }
 
@@ -1460,13 +903,8 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
 
     l.output = calloc(l.batch*l.outputs, sizeof(float));
     l.output_int8 = calloc(l.batch*l.outputs, sizeof(int8_t));
-    //l.delta = calloc(l.batch*l.outputs, sizeof(float));
 
-    // commented only for this custom version of Yolo v2
-    ///l.forward = forward_convolutional_layer;
-    ///l.backward = backward_convolutional_layer;
-    ///l.update = update_convolutional_layer;
-    if (binary) {
+	if (binary) {
         l.binary_weights = calloc(c*n*size*size, sizeof(float));
         l.cweights = calloc(c*n*size*size, sizeof(char));
         l.scales = calloc(n, sizeof(float));
@@ -1866,14 +1304,12 @@ float get_color(int c, int x, int max)
 
 // -------------- option_list.c --------------------
 
-
 // option_list.c
 typedef struct {
     char *key;
     char *val;
     int used;
 } kvp;
-
 
 // option_list.c
 void option_insert(list *l, char *key, char *val)
@@ -2143,7 +1579,8 @@ convolutional_layer parse_convolutional(list *options, size_params params)
     convolutional_layer layer = make_convolutional_layer(batch, h, w, c, n, size, stride, padding, activation, batch_normalize, binary, xnor, params.net.adam, quantized, use_bin_output);
     layer.flipped = option_find_int_quiet(options, "flipped", 0);
     layer.dot = option_find_float_quiet(options, "dot", 0);
-    if (params.net.adam) {
+    
+	if (params.net.adam) {
         layer.B1 = params.net.B1;
         layer.B2 = params.net.B2;
         layer.eps = params.net.eps;
@@ -2181,11 +1618,6 @@ layer parse_region(list *options, size_params params)
     l.class_scale = option_find_float(options, "class_scale", 1);
     l.bias_match = option_find_int_quiet(options, "bias_match", 0);
 
-    char *tree_file = option_find_str(options, "tree", 0);
-    if (tree_file) l.softmax_tree = read_tree(tree_file);
-    char *map_file = option_find_str(options, "map", 0);
-    if (map_file) l.map = read_map(map_file);
-
     char *a = option_find_str(options, "anchors", 0);
     if (a) {
         int len = strlen(a);
@@ -2204,80 +1636,16 @@ layer parse_region(list *options, size_params params)
 }
 
 // parser.c
-int *parse_yolo_mask(char *a, int *num)
-{
-    int *mask = 0;
-    if (a) {
-        int len = strlen(a);
-        int n = 1;
-        int i;
-        for (i = 0; i < len; ++i) {
-            if (a[i] == ',') ++n;
-        }
-        mask = calloc(n, sizeof(int));
-        for (i = 0; i < n; ++i) {
-            int val = atoi(a);
-            mask[i] = val;
-            a = strchr(a, ',') + 1;
-        }
-        *num = n;
-    }
-    return mask;
-}
-
-// parser.c
-layer parse_yolo(list *options, size_params params)
-{
-    int classes = option_find_int(options, "classes", 20);
-    int total = option_find_int(options, "num", 1);
-    int num = total;
-
-    char *a = option_find_str(options, "mask", 0);
-    int *mask = parse_yolo_mask(a, &num);
-    int max_boxes = option_find_int_quiet(options, "max", 90);
-    layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes, max_boxes);
-    if (l.outputs != params.inputs) {
-        printf("Error: l.outputs == params.inputs \n");
-        printf("filters= in the [convolutional]-layer doesn't correspond to classes= or mask= in [yolo]-layer \n");
-        exit(EXIT_FAILURE);
-    }
-    //assert(l.outputs == params.inputs);
-    char *map_file = option_find_str(options, "map", 0);
-    if (map_file) l.map = read_map(map_file);
-
-    l.jitter = option_find_float(options, "jitter", .2);
-    l.focal_loss = option_find_int_quiet(options, "focal_loss", 0);
-
-    l.ignore_thresh = option_find_float(options, "ignore_thresh", .5);
-    l.truth_thresh = option_find_float(options, "truth_thresh", 1);
-    l.random = option_find_int_quiet(options, "random", 0);
-
-    a = option_find_str(options, "anchors", 0);
-    if (a) {
-        int len = strlen(a);
-        int n = 1;
-        int i;
-        for (i = 0; i < len; ++i) {
-            if (a[i] == ',') ++n;
-        }
-        for (i = 0; i < n && i < total * 2; ++i) {
-            float bias = atof(a);
-            l.biases[i] = bias;
-            a = strchr(a, ',') + 1;
-        }
-    }
-    return l;
-}
-
-// parser.c
 softmax_layer parse_softmax(list *options, size_params params)
 {
     int groups = option_find_int_quiet(options, "groups", 1);
     softmax_layer layer = make_softmax_layer(params.batch, params.inputs, groups);
     layer.temperature = option_find_float_quiet(options, "temperature", 1);
-    char *tree_file = option_find_str(options, "tree", 0);
-    if (tree_file) layer.softmax_tree = read_tree(tree_file);
-    return layer;
+    
+	//char *tree_file = option_find_str(options, "tree", 0);
+    //if (tree_file) layer.softmax_tree = read_tree(tree_file);
+    
+	return layer;
 }
 
 // parser.c
@@ -2295,94 +1663,6 @@ maxpool_layer parse_maxpool(list *options, size_params params)
     if (!(h && w && c)) error("Layer before maxpool layer must output image.");
 
     maxpool_layer layer = make_maxpool_layer(batch, h, w, c, size, stride, padding);
-    return layer;
-}
-
-// parser.c
-layer parse_reorg(list *options, size_params params)
-{
-    int stride = option_find_int(options, "stride", 1);
-    int reverse = option_find_int_quiet(options, "reverse", 0);
-
-    int batch, h, w, c;
-    h = params.h;
-    w = params.w;
-    c = params.c;
-    batch = params.batch;
-    if (!(h && w && c)) error("Layer before reorg layer must output image.");
-
-    layer layer = make_reorg_layer(batch, w, h, c, stride, reverse);
-    return layer;
-}
-
-// parser.c
-layer parse_upsample(list *options, size_params params, network net)
-{
-
-    int stride = option_find_int(options, "stride", 2);
-    layer l = make_upsample_layer(params.batch, params.w, params.h, params.c, stride);
-    l.scale = option_find_float_quiet(options, "scale", 1);
-    return l;
-}
-
-// parser.c
-layer parse_shortcut(list *options, size_params params, network net)
-{
-    char *l = option_find(options, "from");
-    int index = atoi(l);
-    if (index < 0) index = params.index + index;
-
-    int batch = params.batch;
-    layer from = net.layers[index];
-
-    layer s = make_shortcut_layer(batch, index, params.w, params.h, params.c, from.out_w, from.out_h, from.out_c);
-
-    char *activation_s = option_find_str(options, "activation", "linear");
-    ACTIVATION activation = get_activation(activation_s);
-    s.activation = activation;
-    return s;
-}
-
-// parser.c
-route_layer parse_route(list *options, size_params params, network net)
-{
-    char *l = option_find(options, "layers");
-    int len = strlen(l);
-    if (!l) error("Route Layer must specify input layers");
-    int n = 1;
-    int i;
-    for (i = 0; i < len; ++i) {
-        if (l[i] == ',') ++n;
-    }
-
-    int *layers = calloc(n, sizeof(int));
-    int *sizes = calloc(n, sizeof(int));
-    for (i = 0; i < n; ++i) {
-        int index = atoi(l);
-        l = strchr(l, ',') + 1;
-        if (index < 0) index = params.index + index;
-        layers[i] = index;
-        sizes[i] = net.layers[index].outputs;
-    }
-    int batch = params.batch;
-
-    route_layer layer = make_route_layer(batch, n, layers, sizes);
-
-    convolutional_layer first = net.layers[layers[0]];
-    layer.out_w = first.out_w;
-    layer.out_h = first.out_h;
-    layer.out_c = first.out_c;
-    for (i = 1; i < n; ++i) {
-        int index = layers[i];
-        convolutional_layer next = net.layers[index];
-        if (next.out_w == first.out_w && next.out_h == first.out_h) {
-            layer.out_c += next.out_c;
-        }
-        else {
-            layer.out_h = layer.out_w = layer.out_c = 0;
-        }
-    }
-
     return layer;
 }
 
@@ -2406,7 +1686,6 @@ void free_section(section *s)
 // parser.c
 LAYER_TYPE string_to_layer_type(char * type)
 {
-    if (strcmp(type, "[yolo]") == 0) return YOLO;
     if (strcmp(type, "[region]") == 0) return REGION;
     if (strcmp(type, "[conv]") == 0
         || strcmp(type, "[convolutional]") == 0) return CONVOLUTIONAL;
@@ -2414,12 +1693,8 @@ LAYER_TYPE string_to_layer_type(char * type)
         || strcmp(type, "[network]") == 0) return NETWORK;
     if (strcmp(type, "[max]") == 0
         || strcmp(type, "[maxpool]") == 0) return MAXPOOL;
-    if (strcmp(type, "[reorg]") == 0) return REORG;
-    if (strcmp(type, "[upsample]") == 0) return UPSAMPLE;
-    if (strcmp(type, "[shortcut]") == 0) return SHORTCUT;
     if (strcmp(type, "[soft]") == 0
         || strcmp(type, "[softmax]") == 0) return SOFTMAX;
-    if (strcmp(type, "[route]") == 0) return ROUTE;
     return BLANK;
 }
 
@@ -2449,23 +1724,6 @@ void parse_net_options(list *options, network *net)
     net->batch /= subdivs;
     net->batch *= net->time_steps;
     net->subdivisions = subdivs;
-
-    char *a = option_find_str(options, "input_calibration", 0);
-    if (a) {
-        int len = strlen(a);
-        int n = 1;
-        int i;
-        for (i = 0; i < len; ++i) {
-            if (a[i] == ',') ++n;
-        }
-        net->input_calibration_size = n;
-        net->input_calibration = (float *)calloc(n, sizeof(float));
-        for (i = 0; i < n; ++i) {
-            float coef = atof(a);
-            net->input_calibration[i] = coef;
-            a = strchr(a, ',') + 1;
-        }
-    }
 
     net->adam = option_find_int_quiet(options, "adam", 0);
     if (net->adam) {
@@ -2592,7 +1850,7 @@ network parse_network_cfg(char *filename, int batch, int quantized)
             l = parse_region(options, params);
         }
         else if (lt == YOLO) {
-            l = parse_yolo(options, params);
+            //l = parse_yolo(options, params);
         }
         else if (lt == SOFTMAX) {
             l = parse_softmax(options, params);
@@ -2602,20 +1860,21 @@ network parse_network_cfg(char *filename, int batch, int quantized)
             l = parse_maxpool(options, params);
         }
         else if (lt == REORG) {
-            l = parse_reorg(options, params);
+            //l = parse_reorg(options, params);
         }
         else if (lt == ROUTE) {
-            l = parse_route(options, params, net);
+            //l = parse_route(options, params, net);
         }
         else if (lt == UPSAMPLE) {
-            l = parse_upsample(options, params, net);
+            //l = parse_upsample(options, params, net);
         }
         else if (lt == SHORTCUT) {
-            l = parse_shortcut(options, params, net);
+            //l = parse_shortcut(options, params, net);
         }
         else {
             fprintf(stderr, "Type not recognized: %s\n", s->type);
         }
+
         l.dontload = option_find_int_quiet(options, "dontload", 0);
         l.dontloadscales = option_find_int_quiet(options, "dontloadscales", 0);
         option_unused(options);
@@ -2681,94 +1940,7 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 #endif    // _MSC_VER
 
 
-
-
-// ------------------------------------------------------
-// Calculate mAP and TP/FP/FN, IoU, F1
-
-#include "pthread.h"
-//#include "box.h"
-
 float box_iou(box a, box b);
-
-typedef enum {
-    CLASSIFICATION_DATA, DETECTION_DATA, CAPTCHA_DATA, REGION_DATA, IMAGE_DATA, LETTERBOX_DATA, COMPARE_DATA, WRITING_DATA, SWAG_DATA, TAG_DATA, OLD_CLASSIFICATION_DATA, STUDY_DATA, DET_DATA, SUPER_DATA
-} data_type;
-
-typedef struct matrix {
-    int rows, cols;
-    float **vals;
-} matrix;
-
-typedef struct {
-    int w, h;
-    matrix X;
-    matrix y;
-    int shallow;
-    int *num_boxes;
-    box **boxes;
-} data;
-
-typedef struct {
-    int id;
-    float x, y, w, h;
-    float left, right, top, bottom;
-} box_label;
-
-typedef struct load_args {
-    int threads;
-    char **paths;
-    char *path;
-    int n;
-    int m;
-    char **labels;
-    int h;
-    int w;
-    int out_w;
-    int out_h;
-    int nh;
-    int nw;
-    int num_boxes;
-    int min, max, size;
-    int classes;
-    int background;
-    int scale;
-    int small_object;
-    float jitter;
-    int flip;
-    float angle;
-    float aspect;
-    float saturation;
-    float exposure;
-    float hue;
-    data *d;
-    image *im;
-    image *resized;
-    data_type type;
-    tree *hierarchy;
-} load_args;
-
-int entry_index(layer l, int batch, int location, int entry)
-{
-    int n = location / (l.w*l.h);
-    int loc = location % (l.w*l.h);
-    return batch*l.outputs + n*l.w*l.h*(4 + l.classes + 1) + entry*l.w*l.h + loc;
-}
-
-int yolo_num_detections(layer l, float thresh)
-{
-    int i, n;
-    int count = 0;
-    for (i = 0; i < l.w*l.h; ++i) {
-        for (n = 0; n < l.n; ++n) {
-            int obj_index = entry_index(l, 0, n*l.w*l.h + i, 4);
-            if (l.output[obj_index] > thresh) {
-                ++count;
-            }
-        }
-    }
-    return count;
-}
 
 int num_detections(network *net, float thresh)
 {
@@ -2776,9 +1948,6 @@ int num_detections(network *net, float thresh)
     int s = 0;
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
-        if (l.type == YOLO) {
-            s += yolo_num_detections(l, thresh);
-        }
         if (l.type == DETECTION || l.type == REGION) {
             s += l.w*l.h*l.n;
         }
@@ -2864,49 +2033,6 @@ void correct_yolo_boxes(detection *dets, int n, int w, int h, int netw, int neth
     }
 }
 
-// yolo_layer.c
-box get_yolo_box(float *x, float *biases, int n, int index, int i, int j, int lw, int lh, int w, int h, int stride)
-{
-    box b;
-    b.x = (i + x[index + 0 * stride]) / lw;
-    b.y = (j + x[index + 1 * stride]) / lh;
-    b.w = exp(x[index + 2 * stride]) * biases[2 * n] / w;
-    b.h = exp(x[index + 3 * stride]) * biases[2 * n + 1] / h;
-    return b;
-}
-
-// yolo_layer.c
-int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets, int letter)
-{
-    int i, j, n;
-    float *predictions = l.output;
-    //if (l.batch == 2) avg_flipped_yolo(l);
-    int count = 0;
-    for (i = 0; i < l.w*l.h; ++i) {
-        int row = i / l.w;
-        int col = i % l.w;
-        for (n = 0; n < l.n; ++n) {
-            int obj_index = entry_index(l, 0, n*l.w*l.h + i, 4);
-            float objectness = predictions[obj_index];
-            //if (objectness <= thresh) continue;   // incorrect behavior for Nan values
-            if (objectness > thresh) {
-                int box_index = entry_index(l, 0, n*l.w*l.h + i, 0);
-                dets[count].bbox = get_yolo_box(predictions, l.biases, l.mask[n], box_index, col, row, l.w, l.h, netw, neth, l.w*l.h);
-                dets[count].objectness = objectness;
-                dets[count].classes = l.classes;
-                for (j = 0; j < l.classes; ++j) {
-                    int class_index = entry_index(l, 0, n*l.w*l.h + i, 4 + 1 + j);
-                    float prob = objectness*predictions[class_index];
-                    dets[count].prob[j] = (prob > thresh) ? prob : 0;
-                }
-                ++count;
-            }
-        }
-    }
-    correct_yolo_boxes(dets, count, w, h, netw, neth, relative, letter);
-    return count;
-}
-
 // get prediction boxes: yolov2_forward_network.c
 void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
 
@@ -2939,10 +2065,6 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
     int j;
     for (j = 0; j < net->n; ++j) {
         layer l = net->layers[j];
-        if (l.type == YOLO) {
-            int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter);
-            dets += count;
-        }
         if (l.type == REGION) {
             custom_get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets, letter);
             //get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets);
@@ -2956,135 +2078,4 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
     return dets;
-}
-
-void *load_thread(void *ptr)
-{
-    load_args a = *(struct load_args*)ptr;
-    if (a.type == IMAGE_DATA) {
-        *(a.im) = load_image(a.path, 0, 0, 3);
-        *(a.resized) = resize_image(*(a.im), a.w, a.h);
-        //printf(" a.path = %s, a.w = %d, a.h = %d \n", a.path, a.w, a.h);
-    }
-    else if (a.type == LETTERBOX_DATA) {
-        printf(" LETTERBOX_DATA isn't implemented \n");
-        getchar();
-        //*(a.im) = load_image(a.path, 0, 0, 0);
-        //*(a.resized) = letterbox_image(*(a.im), a.w, a.h);
-    }
-    else {
-        printf("unknown DATA type = %d \n", a.type);
-        getchar();
-    }
-    free(ptr);
-    return 0;
-}
-
-pthread_t load_data_in_thread(load_args args)
-{
-    pthread_t thread;
-    struct load_args *ptr = calloc(1, sizeof(struct load_args));
-    *ptr = args;
-    if (pthread_create(&thread, 0, load_thread, ptr)) error("Thread creation failed");
-    return thread;
-}
-
-box_label *read_boxes(char *filename, int *n)
-{
-    box_label *boxes = calloc(1, sizeof(box_label));
-    FILE *file = fopen(filename, "r");
-    if (!file)
-    {
-        //file_error(filename);
-        *n = 0;
-        return boxes;
-    }
-    float x, y, h, w;
-    int id;
-    int count = 0;
-    while (fscanf(file, "%d %f %f %f %f", &id, &x, &y, &w, &h) == 5) {
-        boxes = realloc(boxes, (count + 1) * sizeof(box_label));
-        boxes[count].id = id;
-        boxes[count].x = x;
-        boxes[count].y = y;
-        boxes[count].h = h;
-        boxes[count].w = w;
-        boxes[count].left = x - w / 2;
-        boxes[count].right = x + w / 2;
-        boxes[count].top = y - h / 2;
-        boxes[count].bottom = y + h / 2;
-        ++count;
-    }
-    fclose(file);
-    *n = count;
-    return boxes;
-}
-
-typedef struct {
-    box b;
-    float p;
-    int class_id;
-    int image_index;
-    int truth_flag;
-    int unique_truth_index;
-} box_prob;
-
-int detections_comparator(const void *pa, const void *pb)
-{
-    box_prob a = *(box_prob *)pa;
-    box_prob b = *(box_prob *)pb;
-    float diff = a.p - b.p;
-    if (diff < 0) return 1;
-    else if (diff > 0) return -1;
-    return 0;
-}
-
-int nms_comparator_v3(const void *pa, const void *pb)
-{
-    detection a = *(detection *)pa;
-    detection b = *(detection *)pb;
-    float diff = 0;
-    if (b.sort_class >= 0) {
-        diff = a.prob[b.sort_class] - b.prob[b.sort_class];
-    }
-    else {
-        diff = a.objectness - b.objectness;
-    }
-    if (diff < 0) return 1;
-    else if (diff > 0) return -1;
-    return 0;
-}
-
-void do_nms_sort_v3(detection *dets, int total, int classes, float thresh)
-{
-    int i, j, k;
-    k = total - 1;
-    for (i = 0; i <= k; ++i) {
-        if (dets[i].objectness == 0) {
-            detection swap = dets[i];
-            dets[i] = dets[k];
-            dets[k] = swap;
-            --k;
-            --i;
-        }
-    }
-    total = k + 1;
-
-    for (k = 0; k < classes; ++k) {
-        for (i = 0; i < total; ++i) {
-            dets[i].sort_class = k;
-        }
-        qsort(dets, total, sizeof(detection), nms_comparator_v3);
-        for (i = 0; i < total; ++i) {
-            //printf("  k = %d, \t i = %d \n", k, i);
-            if (dets[i].prob[k] == 0) continue;
-            box a = dets[i].bbox;
-            for (j = i + 1; j < total; ++j) {
-                box b = dets[j].bbox;
-                if (box_iou(a, b) > thresh) {
-                    dets[j].prob[k] = 0;
-                }
-            }
-        }
-    }
 }

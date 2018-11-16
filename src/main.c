@@ -2,7 +2,6 @@
 #include <stdlib.h>
 
 #include "box.h"
-#include "pthread.h"
 
 #include "additionally.h"
 
@@ -103,6 +102,7 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
         }
     }
 
+
     // image output
     qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_probs);
     for (i = 0; i < selected_detections_num; ++i) {
@@ -143,12 +143,9 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 
 
 // --------------- Detect on the Image ---------------
-
-
 // Detect on Image: this function uses other functions not from this file
 void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh, int quantized, int dont_show)
 {
-    //image **alphabet = load_alphabet();            // image.c
     image **alphabet = NULL;
     network net = parse_network_cfg(cfgfile, 1, quantized);    // parser.c
     if (weightfile) {
@@ -199,11 +196,6 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
         }
 
 		printf("%s: Predicted in %f seconds.\n", input, (float)(clock() - time) / CLOCKS_PER_SEC); //sec(clock() - time));
-        //get_region_boxes_cpu(l, 1, 1, thresh, probs, boxes, 0, 0);            // get_region_boxes(): region_layer.c
-
-        //  nms (non maximum suppression) - if (IoU(box[i], box[j]) > nms) then remove one of two boxes with lower probability
-        //if (nms) do_nms_sort(boxes, probs, l.w*l.h*l.n, l.classes, nms);    // box.c
-        //draw_detections_cpu(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);    // draw_detections(): image.c
         float hier_thresh = 0.5;
         int ext_output = 1, letterbox = 0, nboxes = 0;
         detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
@@ -232,21 +224,13 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
 void run_detector(int argc, char **argv)
 {
     int dont_show = find_arg(argc, argv, "-dont_show");
-    char *prefix = find_char_arg(argc, argv, "-prefix", 0);
     float thresh = find_float_arg(argc, argv, "-thresh", .25);
-    float iou_thresh = find_float_arg(argc, argv, "-iou_thresh", .5);    // 0.5 for mAP
-    char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
-    int cam_index = find_int_arg(argc, argv, "-c", 0);
     int quantized = find_arg(argc, argv, "-quantized");
-    int input_calibration = find_int_arg(argc, argv, "-input_calibration", 0);
-    int frame_skip = find_int_arg(argc, argv, "-s", 0);
     
 	if (argc < 4) {
         fprintf(stderr, "usage: %s %s [test] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
     }
-
-    int clear = 0;                // find_arg(argc, argv, "-clear");
 
     char *obj_names = argv[3];    // char *datacfg = argv[3];
     char *cfg = argv[4];
@@ -265,6 +249,7 @@ void run_detector(int argc, char **argv)
         names[obj_count][strlen(buffer) - 1] = '\0'; //remove newline
         ++obj_count;
     }
+
     fclose(fp);
     int classes = obj_count;
 

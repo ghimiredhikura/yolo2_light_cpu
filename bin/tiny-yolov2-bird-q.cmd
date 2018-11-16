@@ -1,0 +1,1 @@
+yolo_cpu.exe detector test tiny-yolov2/voc.names tiny-yolov2/yolov2-tiny-voc.cfg tiny-yolov2/yolov2-tiny-voc.weights -thresh 0.15 eagle.jpg -quantized
