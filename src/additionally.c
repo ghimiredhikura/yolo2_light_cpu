@@ -12,6 +12,8 @@
 // global GPU index: cuda.c
 int gpu_index = 0;
 
+int m_dbg = 1;
+
 // im2col.c
 float im2col_get_pixel(float *im, int height, int width, int channels,
     int row, int col, int channel, int pad)
@@ -172,6 +174,13 @@ void calculate_binary_weights(network net)
                     l->activation = LINEAR;
                 }
             }
+
+			if(m_dbg) 
+			{
+				layer l1 = net.layers[j];
+				if (l1.dontload) continue;
+				save_convolutional_weights(l1, j);
+			}
         }
     }
 }
@@ -1825,7 +1834,10 @@ network parse_network_cfg(char *filename, int batch, int quantized)
     int count = 0;
     free_section(s);
     fprintf(stderr, "layer     filters    size              input                output\n");
-    while (n) {
+    
+	if (m_dbg) save_net_param(net);
+	
+	while (n) {
         params.index = count;
         fprintf(stderr, "%5d ", count);
         s = (section *)n->val;
@@ -2078,4 +2090,80 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
     return dets;
+}
+
+
+void save_convolutional_weights(layer l, int ind)
+{
+	char fn_conv[256], fn_norm[256];
+	fprintf(stderr, "layer %d: writing weights...", ind + 1);
+	sprintf(fn_conv, "dbg/conv_weights_%02d.txt", ind + 1);
+	sprintf(fn_norm, "dbg/batchnorm_parameters_%02d.txt", ind + 1);
+	FILE *fp_conv = fopen(fn_conv, "w");
+	FILE *fp_norm = fopen(fn_norm, "w");
+
+	for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.biases[i]);
+	fprintf(fp_norm, "\n");
+	if (l.batch_normalize && (!l.dontloadscales)) {
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.scales[i]);
+		fprintf(fp_norm, "\n");
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.rolling_mean[i]);
+		fprintf(fp_norm, "\n");
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.rolling_variance[i]);
+		fprintf(fp_norm, "\n");
+	}
+	
+	int num = l.n*l.c*l.size*l.size;
+	if(l.xnor == 1) {
+		for (int i = 0; i < num; i++) fprintf(fp_conv, "%f\n", l.binary_weights[i]);
+	} else {
+		for (int i = 0; i < num; i++) fprintf(fp_conv, "%f\n", l.weights[i]);
+	}
+
+	fclose(fp_conv);
+	fclose(fp_norm);
+	fprintf(stderr, "done.\n");
+}
+
+void save_net_param(network net)
+{
+	char buf[256];
+	fprintf(stderr, "network init.: writing parameters...");
+	sprintf(buf, "dbg/network_parameters.txt");
+	FILE *fp = fopen(buf, "w");
+	fprintf(fp, "m_net.inputs: %d\n", net.inputs);
+	fprintf(fp, "m_net.h: %d\n", net.h);
+	fprintf(fp, "m_net.w: %d\n", net.w);
+	fprintf(fp, "m_net.c: %d\n", net.c);
+	fprintf(fp, "m_net.max_crop: %d\n", net.max_crop);
+	fprintf(fp, "m_net.min_crop: %d\n", net.min_crop);
+	fprintf(fp, "m_net.angle: %f\n", net.angle);
+	fprintf(fp, "m_net.aspect: %f\n", net.aspect);
+	fprintf(fp, "m_net.saturation: %f\n", net.saturation);
+	fprintf(fp, "m_net.exposure: %f\n", net.exposure);
+	fprintf(fp, "m_net.hue: %f\n", net.hue);
+	fprintf(fp, "m_net.learning_rate: %f\n", net.learning_rate);
+	fprintf(fp, "m_net.batch: %d\n", net.batch);
+	fprintf(fp, "m_net.max_batches: %d\n", net.max_batches);
+	fprintf(fp, "m_net.step: %d\n", net.step);
+	fprintf(fp, "m_net.scale: %f\n", net.scale);
+	fprintf(fp, "m_net.num_steps: %d\n", net.num_steps);
+	for (int i = 0; i < net.num_steps; i++) {
+		fprintf(fp, "m_net.step[%d]      : %d\n", i, net.steps[i]);
+		fprintf(fp, "m_net.scale[%d]     : %f\n", i, net.scales[i]);
+	}
+	fprintf(fp, "m_net.time_steps: %d\n", net.time_steps);
+	fprintf(fp, "m_net.policy: %d\n", net.policy);
+	fprintf(fp, "m_net.gamma: %f\n", net.gamma);
+	fprintf(fp, "m_net.power: %f\n", net.power);
+	fprintf(fp, "m_net.decay: %f\n", net.decay);
+	fprintf(fp, "m_net.adam: %d\n", net.adam);
+	fprintf(fp, "m_net.B1: %f\n", net.B1);
+	fprintf(fp, "m_net.B2: %f\n", net.B2);
+	fprintf(fp, "m_net.eps: %f\n", net.eps);
+	fprintf(fp, "m_net.burn_in: %d\n", net.burn_in);
+	fprintf(fp, "m_net.momentum: %f\n", net.momentum);
+	fprintf(fp, "m_net.subdivisions : %d\n", net.subdivisions);
+	fclose(fp);
+	fprintf(stderr, "done.\n");
 }

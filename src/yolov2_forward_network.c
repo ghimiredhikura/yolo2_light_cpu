@@ -33,7 +33,8 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
             binarize_weights(l.weights, l.n, l.c*l.size*l.size, l.binary_weights);
             //printf("\n binarize_weights l.align_bit_weights = %p \n", l.align_bit_weights);
         }
-        binarize_cpu(state.input, l.c*l.h*l.w*l.batch, l.binary_input);
+        
+		binarize_cpu(state.input, l.c*l.h*l.w*l.batch, l.binary_input);
 
         l.weights = l.binary_weights;
         state.input = l.binary_input;

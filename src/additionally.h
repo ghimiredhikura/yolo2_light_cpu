@@ -13,6 +13,8 @@
 #include <float.h>
 #include <limits.h>
 #include <stdint.h>
+#include <direct.h>
+
 
 #ifdef OPENCV
 #include <opencv2/core/fast_math.hpp>
@@ -728,7 +730,11 @@ extern "C" {
     // additionally.c
     void free_detections(detection *dets, int n);
 
-    // -------------- yolov2_forward_network_gpu.c --------------------
+
+	// save probing data
+
+	void save_convolutional_weights(layer l, int ind);
+	void save_net_param(network net);
 
     // -------------- gettimeofday for Windows--------------------
 

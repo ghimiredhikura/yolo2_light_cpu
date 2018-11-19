@@ -154,7 +154,9 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
     //set_batch_network(&net, 1);                    // network.c
     srand(2222222);
     yolov2_fuse_conv_batchnorm(net);
+
     calculate_binary_weights(net);
+
     if (quantized) {
         printf("\n\n Quantinization! \n\n");
         quantinization_and_get_multipliers(net);
@@ -268,6 +270,8 @@ int main(int argc, char **argv)
         if (!argv[i]) continue;
         strip(argv[i]);
     }
+
+	_mkdir("dbg");
 
     if (argc < 2) {
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
