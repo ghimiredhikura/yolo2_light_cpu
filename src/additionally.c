@@ -12,8 +12,6 @@
 // global GPU index: cuda.c
 int gpu_index = 0;
 
-int m_dbg = 1;
-
 // im2col.c
 float im2col_get_pixel(float *im, int height, int width, int channels,
     int row, int col, int channel, int pad)
@@ -175,12 +173,12 @@ void calculate_binary_weights(network net)
                 }
             }
 
-			if(m_dbg) 
-			{
-				layer l1 = net.layers[j];
-				if (l1.dontload) continue;
-				save_convolutional_weights(l1, j);
-			}
+//			if(m_dbg) 
+//			{
+//				layer l1 = net.layers[j];
+//				if (l1.dontload) continue;
+//				save_convolutional_weights(l1, j);
+//			}
         }
     }
 }
@@ -321,7 +319,6 @@ void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, i
         }
     }
 }
-
 
 void float_to_bit(float *src, unsigned char *dst, size_t size)
 {
@@ -1901,6 +1898,9 @@ network parse_network_cfg(char *filename, int batch, int quantized)
             params.c = l.out_c;
             params.inputs = l.outputs;
         }
+
+		if (m_dbg) save_layer_param(l, count, lt);
+
     }
     free_list(sections);
     net.outputs = get_network_output_size(net);
@@ -2131,6 +2131,7 @@ void save_net_param(network net)
 	fprintf(stderr, "network init.: writing parameters...");
 	sprintf(buf, "dbg/network_parameters.txt");
 	FILE *fp = fopen(buf, "w");
+	fprintf(fp, "m_net.quantized: %d\n", net.quantized);
 	fprintf(fp, "m_net.inputs: %d\n", net.inputs);
 	fprintf(fp, "m_net.h: %d\n", net.h);
 	fprintf(fp, "m_net.w: %d\n", net.w);
@@ -2152,7 +2153,12 @@ void save_net_param(network net)
 		fprintf(fp, "m_net.step[%d]      : %d\n", i, net.steps[i]);
 		fprintf(fp, "m_net.scale[%d]     : %f\n", i, net.scales[i]);
 	}
+	fprintf(fp, "m_net.input_calibration_size: %d\n", net.input_calibration_size);
+	for (int i = 0; i < net.input_calibration_size; i++) {
+		fprintf(fp, "m_net.input_calibration[%d]     : %f\n", i, net.input_calibration[i]);
+	}
 	fprintf(fp, "m_net.time_steps: %d\n", net.time_steps);
+	fprintf(fp, "m_net.burn_in: %d\n", net.burn_in);
 	fprintf(fp, "m_net.policy: %d\n", net.policy);
 	fprintf(fp, "m_net.gamma: %f\n", net.gamma);
 	fprintf(fp, "m_net.power: %f\n", net.power);
@@ -2164,6 +2170,92 @@ void save_net_param(network net)
 	fprintf(fp, "m_net.burn_in: %d\n", net.burn_in);
 	fprintf(fp, "m_net.momentum: %f\n", net.momentum);
 	fprintf(fp, "m_net.subdivisions : %d\n", net.subdivisions);
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+void save_layer_param(layer l, int count, int lt)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d init.: writing parameters...", count);
+	sprintf(buf, "dbg/layer_parameters_%02d_%02d.txt", count, lt);
+	FILE *fp = fopen(buf, "w");
+	fprintf(fp, "layer #%d (type: %d)\n", count, lt);
+	fprintf(fp, "l.binary: %d\n", l.binary);
+	fprintf(fp, "l.xnor: %d\n", l.xnor);
+	fprintf(fp, "l.use_bin_output: %d\n", l.use_bin_output);
+	fprintf(fp, "l.size: %d\n", l.size);
+	fprintf(fp, "l.stride: %d\n", l.stride);
+	fprintf(fp, "l.pad: %d\n", l.pad);
+	fprintf(fp, "l.n (# of filters): %d\n", l.n);
+	fprintf(fp, "l.batch_normalize: %d\n", l.batch_normalize);
+	fprintf(fp, "l.activation(type): %d\n", l.activation);
+	fprintf(fp, "l.out_h: %d\n", l.out_h);
+	fprintf(fp, "l.out_w: %d\n", l.out_w);
+	fprintf(fp, "l.out_c: %d\n", l.out_c);
+	fprintf(fp, "l.outputs: %d\n", l.outputs);
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+/*
+void save_layer_data(layer l, int count)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d: writing layer data...", count);
+	sprintf(buf, "dbg/layer_%02d_data_%04d_%04d_%04d_%08d.txt", count, l.out_w, l.out_h, l.out_c, l.outputs);
+	FILE *fp = fopen(buf, "w");
+	
+	if (l.out_w > 0) {
+		for (int x = 0; x < l.out_w; x++)
+			for (int y = 0; y < l.out_h; y++)
+			{
+				for (int c = 0; c < l.out_c; c++) {
+					fprintf(fp, "%f", l.output[y*l.out_w*l.out_c + x*l.out_c + c]);
+					if (c < (l.out_c - 1)) fprintf(fp, " ");
+				}
+				fprintf(fp, "\n");
+			}
+	}
+	else {
+		for (int c = 0; c < l.outputs; c++) fprintf(fp, "%f\n", l.output[c]);
+	}
+	
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+*/
+
+
+void save_layer_data(layer l, int count)
+{
+	char buf[256];
+
+	fprintf(stderr, "layer %d: writing layer data...", count);
+	sprintf(buf, "dbg/layer_%02d_data_%04d_%04d_%04d_%08d.txt", count, l.w, l.h, l.c, l.inputs);
+	FILE *fp = fopen(buf, "w");
+	
+	if (l.xnor) {
+		if (l.w > 0) {
+			for (int x = 0; x < l.w; x++)
+				for (int y = 0; y < l.h; y++)
+				{
+					for (int c = 0; c < l.c; c++) {
+						int b_i = l.binary_input[y*l.w*l.c + x*l.c + c];
+						fprintf(fp, "%d", b_i);
+						if (c < (l.out_c - 1)) fprintf(fp, " ");
+					}
+					fprintf(fp, "\n");
+				}
+		}
+		else {
+			for (int c = 0; c < l.inputs; c++) {
+				int b_i = l.binary_input[c];
+				fprintf(fp, "%d\n", b_i);
+			}
+		}
+	}
+
 	fclose(fp);
 	fprintf(stderr, "done.\n");
 }

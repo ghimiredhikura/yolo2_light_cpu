@@ -372,7 +372,7 @@ void yolov2_forward_network_q(network net, network_state state)
 
         if (l.type == CONVOLUTIONAL) {
             if (i >= 1 && l.activation != LINEAR) forward_convolutional_layer_q(l, state);
-            else forward_convolutional_layer_cpu(l, state);
+            else forward_convolutional_layer_cpu(l, i, state);
 
             printf("\n %d - CONVOLUTIONAL \t\t l.size = %d  \n", i, l.size);
         }

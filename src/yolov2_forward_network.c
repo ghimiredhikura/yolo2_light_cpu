@@ -17,9 +17,8 @@ size_t binary_transpose_align_input(int k, int n, float *b, char **t_bit_input, 
 }
 
 // 4 layers in 1: convolution, batch-normalization, BIAS and activation
-void forward_convolutional_layer_cpu(layer l, network_state state)
+void forward_convolutional_layer_cpu(layer l, int layer_id, network_state state)
 {
-
     int out_h = (l.h + 2 * l.pad - l.size) / l.stride + 1;    // output_height=input_height for stride=1 and pad=1
     int out_w = (l.w + 2 * l.pad - l.size) / l.stride + 1;    // output_width=input_width for stride=1 and pad=1
     int i, f, j;
@@ -39,6 +38,14 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
         l.weights = l.binary_weights;
         state.input = l.binary_input;
     }
+
+	if (m_dbg)
+	{
+		//if (l.dontload) continue;
+		save_convolutional_weights(l, layer_id);
+		save_layer_data(l, layer_id);
+	}
+	
 
     // l.n - number of filters on this layer
     // l.c - channels of input-array
@@ -221,7 +228,7 @@ void yolov2_forward_network_cpu(network net, network_state state)
         layer l = net.layers[i];
 
         if (l.type == CONVOLUTIONAL) {
-            forward_convolutional_layer_cpu(l, state);
+            forward_convolutional_layer_cpu(l, i, state);
             //printf("\n CONVOLUTIONAL \t\t l.size = %d  \n", l.size);
         }
         else if (l.type == MAXPOOL) {
@@ -255,7 +262,7 @@ void yolov2_forward_network_cpu(network net, network_state state)
         else {
             printf("\n layer: %d \n", l.type);
         }
-
+		
         state.input = l.output;
     }
 }
@@ -275,7 +282,8 @@ float *network_predict_cpu(network net, float *input)
                                             //float *out = get_network_output(net);
     int i;
     for (i = net.n - 1; i > 0; --i) if (net.layers[i].type != COST) break;
-    return net.layers[i].output;
+    
+	return net.layers[i].output;
 }
 
 

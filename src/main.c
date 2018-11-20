@@ -272,6 +272,7 @@ int main(int argc, char **argv)
     }
 
 	_mkdir("dbg");
+	m_dbg = 1;
 
     if (argc < 2) {
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
