@@ -24,7 +24,7 @@
 #endif
 
 // get prediction boxes: yolov2_forward_network.c
-void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
+//void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
 
 typedef struct detection_with_class {
     detection det;
@@ -140,14 +140,12 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
     free(selected_detections);
 }
 
-
-
 // --------------- Detect on the Image ---------------
 // Detect on Image: this function uses other functions not from this file
 void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh, int quantized, int dont_show)
 {
     image **alphabet = NULL;
-    network net = parse_network_cfg(cfgfile, 1, quantized);    // parser.c
+    network net = parse_network_cfg(cfgfile, 1, quantized);  // parser.c
     if (weightfile) {
         load_weights_upto_cpu(&net, weightfile, net.n);    // parser.c
     }
@@ -157,16 +155,13 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
 
     calculate_binary_weights(net);
 
-    if (quantized) {
-        printf("\n\n Quantinization! \n\n");
-        quantinization_and_get_multipliers(net);
-    }
-    clock_t time;
+	clock_t time;
     char buff[256];
     char *input = buff;
     int j;
     float nms = .4;
-    while (1) {
+    while (1) 
+	{
         if (filename) {
             strncpy(input, filename, 256);
         }
@@ -177,6 +172,7 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
             if (!input) return;
             strtok(input, "\n");
         }
+
         image im = load_image(input, 0, 0, 3);            // image.c
         image sized = resize_image(im, net.w, net.h);    // image.c
         layer l = net.layers[net.n - 1];
@@ -188,14 +184,7 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
         float *X = sized.data;
         time = clock();
         
-		//network_predict(net, X);
-        if (quantized) {
-            network_predict_quantized(net, X);    // quantized works only with Yolo v2
-            nms = 0.2;
-        }
-        else {
-            network_predict_cpu(net, X);
-        }
+        network_predict_cpu(net, X);
 
 		printf("%s: Predicted in %f seconds.\n", input, (float)(clock() - time) / CLOCKS_PER_SEC); //sec(clock() - time));
         float hier_thresh = 0.5;
@@ -204,7 +193,7 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
         if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
 
-        save_image_png(im, "predictions");    // image.c
+        //save_image_png(im, "predictions");    // image.c
         if (!dont_show) {
             show_image(im, "predictions");    // image.c
         }

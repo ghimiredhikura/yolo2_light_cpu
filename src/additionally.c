@@ -664,22 +664,6 @@ char *fgetl(FILE *fp)
 }
 
 // utils.c
-int *read_map(char *filename)
-{
-    int n = 0;
-    int *map = 0;
-    char *str;
-    FILE *file = fopen(filename, "r");
-    if (!file) file_error(filename);
-    while ((str = fgetl(file))) {
-        ++n;
-        map = realloc(map, n * sizeof(int));
-        map[n - 1] = atoi(str);
-    }
-    return map;
-}
-
-// utils.c
 void del_arg(int argc, char **argv, int index)
 {
     int i;
@@ -889,80 +873,6 @@ void free_ptrs(void **ptrs, int n)
     free(ptrs);
 }
 
-
-// -------------- tree.c --------------
-
-// tree.c
-void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves)
-{
-    int j;
-    for (j = 0; j < n; ++j) {
-        int parent = hier->parent[j];
-        if (parent >= 0) {
-            predictions[j] *= predictions[parent];
-        }
-    }
-    if (only_leaves) {
-        for (j = 0; j < n; ++j) {
-            if (!hier->leaf[j]) predictions[j] = 0;
-        }
-    }
-}
-
-// tree.c
-tree *read_tree(char *filename)
-{
-    tree t = { 0 };
-    FILE *fp = fopen(filename, "r");
-
-    char *line;
-    int last_parent = -1;
-    int group_size = 0;
-    int groups = 0;
-    int n = 0;
-    while ((line = fgetl(fp)) != 0) {
-        char *id = calloc(256, sizeof(char));
-        int parent = -1;
-        sscanf(line, "%s %d", id, &parent);
-        t.parent = realloc(t.parent, (n + 1) * sizeof(int));
-        t.parent[n] = parent;
-
-        t.name = realloc(t.name, (n + 1) * sizeof(char *));
-        t.name[n] = id;
-        if (parent != last_parent) {
-            ++groups;
-            t.group_offset = realloc(t.group_offset, groups * sizeof(int));
-            t.group_offset[groups - 1] = n - group_size;
-            t.group_size = realloc(t.group_size, groups * sizeof(int));
-            t.group_size[groups - 1] = group_size;
-            group_size = 0;
-            last_parent = parent;
-        }
-        t.group = realloc(t.group, (n + 1) * sizeof(int));
-        t.group[n] = groups;
-        ++n;
-        ++group_size;
-    }
-    ++groups;
-    t.group_offset = realloc(t.group_offset, groups * sizeof(int));
-    t.group_offset[groups - 1] = n - group_size;
-    t.group_size = realloc(t.group_size, groups * sizeof(int));
-    t.group_size[groups - 1] = group_size;
-    t.n = n;
-    t.groups = groups;
-    t.leaf = calloc(n, sizeof(int));
-    int i;
-    for (i = 0; i < n; ++i) t.leaf[i] = 1;
-    for (i = 0; i < n; ++i) if (t.parent[i] >= 0) t.leaf[t.parent[i]] = 0;
-
-    fclose(fp);
-    tree *tree_ptr = calloc(1, sizeof(tree));
-    *tree_ptr = t;
-    //error(0);
-    return tree_ptr;
-}
-
-
 // -------------- list.c --------------
 
 
@@ -1097,7 +1007,6 @@ void set_batch_network(network *net, int b)
 // -------------- layer.c --------------
 
 
-
 void free_layer(layer l)
 {
     if (l.type == DROPOUT) {
@@ -1175,7 +1084,7 @@ softmax_layer make_softmax_layer(int batch, int inputs, int groups)
 }
 
 // -------------- upsample_layer.c --------------
-
+/*
 // upsample_layer.c
 layer make_upsample_layer(int batch, int w, int h, int c, int stride)
 {
@@ -1299,6 +1208,7 @@ route_layer make_route_layer(int batch, int n, int *input_layers, int *input_siz
 
 // -------------- yolo_layer.c --------------
 
+
 layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int classes, int max_boxes)
 {
     int i;
@@ -1340,7 +1250,7 @@ layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int 
 
     return l;
 }
-
+*/
 // -------------- region_layer.c --------------
 
 //  region_layer.c
@@ -1697,6 +1607,7 @@ image load_image(char *filename, int w, int h, int c)
     return out;
 }
 
+/*
 // image.c
 image load_image_stb(char *filename, int channels)
 {
@@ -1721,7 +1632,7 @@ image load_image_stb(char *filename, int channels)
     free(data);
     return im;
 }
-
+*/
 
 #ifdef OPENCV
 
@@ -1831,33 +1742,11 @@ void show_image_cv_ipl(IplImage *disp, const char *name)
 }
 #endif
 
-// image.c
-void save_image_png(image im, const char *name)
-{
-    char buff[256];
-    sprintf(buff, "%s.png", name);
-    unsigned char *data = calloc(im.w*im.h*im.c, sizeof(char));
-    int i, k;
-    for (k = 0; k < im.c; ++k) {
-        for (i = 0; i < im.w*im.h; ++i) {
-            data[i*im.c + k] = (unsigned char)(255 * im.data[i + k*im.w*im.h]);
-        }
-    }
-    int success = stbi_write_png(buff, im.w, im.h, im.c, data, im.w*im.c);
-    free(data);
-    if (!success) fprintf(stderr, "Failed to write image %s\n", buff);
-}
-
 
 // image.c
 void show_image(image p, const char *name)
 {
-#ifdef OPENCV
     show_image_cv(p, name);
-#else
-    fprintf(stderr, "Not compiled with OpenCV, saving to %s.png instead\n", name);
-    save_image_png(p, name);
-#endif
 }
 
 // image.c
@@ -2200,9 +2089,9 @@ layer parse_region(list *options, size_params params)
     l.bias_match = option_find_int_quiet(options, "bias_match", 0);
 
     char *tree_file = option_find_str(options, "tree", 0);
-    if (tree_file) l.softmax_tree = read_tree(tree_file);
-    char *map_file = option_find_str(options, "map", 0);
-    if (map_file) l.map = read_map(map_file);
+   // if (tree_file) l.softmax_tree = read_tree(tree_file);
+   // char *map_file = option_find_str(options, "map", 0);
+   // if (map_file) l.map = read_map(map_file);
 
     char *a = option_find_str(options, "anchors", 0);
     if (a) {
@@ -2221,6 +2110,7 @@ layer parse_region(list *options, size_params params)
     return l;
 }
 
+/*
 // parser.c
 int *parse_yolo_mask(char *a, int *num)
 {
@@ -2242,6 +2132,7 @@ int *parse_yolo_mask(char *a, int *num)
     }
     return mask;
 }
+
 
 // parser.c
 layer parse_yolo(list *options, size_params params)
@@ -2286,15 +2177,15 @@ layer parse_yolo(list *options, size_params params)
     }
     return l;
 }
-
+*/
 // parser.c
 softmax_layer parse_softmax(list *options, size_params params)
 {
     int groups = option_find_int_quiet(options, "groups", 1);
     softmax_layer layer = make_softmax_layer(params.batch, params.inputs, groups);
     layer.temperature = option_find_float_quiet(options, "temperature", 1);
-    char *tree_file = option_find_str(options, "tree", 0);
-    if (tree_file) layer.softmax_tree = read_tree(tree_file);
+   // char *tree_file = option_find_str(options, "tree", 0);
+   // if (tree_file) layer.softmax_tree = read_tree(tree_file);
     return layer;
 }
 
@@ -2315,7 +2206,7 @@ maxpool_layer parse_maxpool(list *options, size_params params)
     maxpool_layer layer = make_maxpool_layer(batch, h, w, c, size, stride, padding);
     return layer;
 }
-
+/*
 // parser.c
 layer parse_reorg(list *options, size_params params)
 {
@@ -2403,6 +2294,7 @@ route_layer parse_route(list *options, size_params params, network net)
 
     return layer;
 }
+*/
 
 // parser.c
 void free_section(section *s)
@@ -2424,7 +2316,7 @@ void free_section(section *s)
 // parser.c
 LAYER_TYPE string_to_layer_type(char * type)
 {
-    if (strcmp(type, "[yolo]") == 0) return YOLO;
+   // if (strcmp(type, "[yolo]") == 0) return YOLO;
     if (strcmp(type, "[region]") == 0) return REGION;
     if (strcmp(type, "[conv]") == 0
         || strcmp(type, "[convolutional]") == 0) return CONVOLUTIONAL;
@@ -2432,12 +2324,12 @@ LAYER_TYPE string_to_layer_type(char * type)
         || strcmp(type, "[network]") == 0) return NETWORK;
     if (strcmp(type, "[max]") == 0
         || strcmp(type, "[maxpool]") == 0) return MAXPOOL;
-    if (strcmp(type, "[reorg]") == 0) return REORG;
-    if (strcmp(type, "[upsample]") == 0) return UPSAMPLE;
-    if (strcmp(type, "[shortcut]") == 0) return SHORTCUT;
+    //if (strcmp(type, "[reorg]") == 0) return REORG;
+    //if (strcmp(type, "[upsample]") == 0) return UPSAMPLE;
+    //if (strcmp(type, "[shortcut]") == 0) return SHORTCUT;
     if (strcmp(type, "[soft]") == 0
         || strcmp(type, "[softmax]") == 0) return SOFTMAX;
-    if (strcmp(type, "[route]") == 0) return ROUTE;
+    //if (strcmp(type, "[route]") == 0) return ROUTE;
     return BLANK;
 }
 
@@ -2593,24 +2485,13 @@ network parse_network_cfg(char *filename, int batch, int quantized)
         layer l = { 0 };
         LAYER_TYPE lt = string_to_layer_type(s->type);
         if (lt == CONVOLUTIONAL) {
-            // if(count == 80) params.quantized = 0;    // doesn't lost GPU - mAP = 45.61%
-            node *tmp = n->next;
-            if(tmp) tmp = tmp->next;
-            if (tmp)
-            {
-                if (string_to_layer_type(((section *)tmp->val)->type) == YOLO) {
-                    params.quantized = 0;    // mAP = 53.60%
-                    //printf("\n\n i = %d \n\n", count);
-                }
-            }
-
             l = parse_convolutional(options, params);
         }
         else if (lt == REGION) {
             l = parse_region(options, params);
         }
         else if (lt == YOLO) {
-            l = parse_yolo(options, params);
+            //l = parse_yolo(options, params);
         }
         else if (lt == SOFTMAX) {
             l = parse_softmax(options, params);
@@ -2620,16 +2501,16 @@ network parse_network_cfg(char *filename, int batch, int quantized)
             l = parse_maxpool(options, params);
         }
         else if (lt == REORG) {
-            l = parse_reorg(options, params);
+            //l = parse_reorg(options, params);
         }
         else if (lt == ROUTE) {
-            l = parse_route(options, params, net);
+            //l = parse_route(options, params, net);
         }
         else if (lt == UPSAMPLE) {
-            l = parse_upsample(options, params, net);
+            //l = parse_upsample(options, params, net);
         }
         else if (lt == SHORTCUT) {
-            l = parse_shortcut(options, params, net);
+            //l = parse_shortcut(options, params, net);
         }
         else {
             fprintf(stderr, "Type not recognized: %s\n", s->type);
@@ -2698,79 +2579,6 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 }
 #endif    // _MSC_VER
 
-
-
-// ------------------------------------------------------
-// Calculate mAP and TP/FP/FN, IoU, F1
-
-//#include "pthread.h"
-//#include "box.h"
-
-/*
-// from: box.h
-typedef struct {
-    float x, y, w, h;
-} box;
-*/
-
-float box_iou(box a, box b);
-
-typedef enum {
-    CLASSIFICATION_DATA, DETECTION_DATA, CAPTCHA_DATA, REGION_DATA, IMAGE_DATA, LETTERBOX_DATA, COMPARE_DATA, WRITING_DATA, SWAG_DATA, TAG_DATA, OLD_CLASSIFICATION_DATA, STUDY_DATA, DET_DATA, SUPER_DATA
-} data_type;
-
-typedef struct matrix {
-    int rows, cols;
-    float **vals;
-} matrix;
-
-typedef struct {
-    int w, h;
-    matrix X;
-    matrix y;
-    int shallow;
-    int *num_boxes;
-    box **boxes;
-} data;
-
-typedef struct {
-    int id;
-    float x, y, w, h;
-    float left, right, top, bottom;
-} box_label;
-
-typedef struct load_args {
-    int threads;
-    char **paths;
-    char *path;
-    int n;
-    int m;
-    char **labels;
-    int h;
-    int w;
-    int out_w;
-    int out_h;
-    int nh;
-    int nw;
-    int num_boxes;
-    int min, max, size;
-    int classes;
-    int background;
-    int scale;
-    int small_object;
-    float jitter;
-    int flip;
-    float angle;
-    float aspect;
-    float saturation;
-    float exposure;
-    float hue;
-    data *d;
-    image *im;
-    image *resized;
-    data_type type;
-    tree *hierarchy;
-} load_args;
 
 int entry_index(layer l, int batch, int location, int entry)
 {
@@ -2888,49 +2696,6 @@ void correct_yolo_boxes(detection *dets, int n, int w, int h, int netw, int neth
     }
 }
 
-// yolo_layer.c
-box get_yolo_box(float *x, float *biases, int n, int index, int i, int j, int lw, int lh, int w, int h, int stride)
-{
-    box b;
-    b.x = (i + x[index + 0 * stride]) / lw;
-    b.y = (j + x[index + 1 * stride]) / lh;
-    b.w = exp(x[index + 2 * stride]) * biases[2 * n] / w;
-    b.h = exp(x[index + 3 * stride]) * biases[2 * n + 1] / h;
-    return b;
-}
-
-// yolo_layer.c
-int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets, int letter)
-{
-    int i, j, n;
-    float *predictions = l.output;
-    //if (l.batch == 2) avg_flipped_yolo(l);
-    int count = 0;
-    for (i = 0; i < l.w*l.h; ++i) {
-        int row = i / l.w;
-        int col = i % l.w;
-        for (n = 0; n < l.n; ++n) {
-            int obj_index = entry_index(l, 0, n*l.w*l.h + i, 4);
-            float objectness = predictions[obj_index];
-            //if (objectness <= thresh) continue;   // incorrect behavior for Nan values
-            if (objectness > thresh) {
-                int box_index = entry_index(l, 0, n*l.w*l.h + i, 0);
-                dets[count].bbox = get_yolo_box(predictions, l.biases, l.mask[n], box_index, col, row, l.w, l.h, netw, neth, l.w*l.h);
-                dets[count].objectness = objectness;
-                dets[count].classes = l.classes;
-                for (j = 0; j < l.classes; ++j) {
-                    int class_index = entry_index(l, 0, n*l.w*l.h + i, 4 + 1 + j);
-                    float prob = objectness*predictions[class_index];
-                    dets[count].prob[j] = (prob > thresh) ? prob : 0;
-                }
-                ++count;
-            }
-        }
-    }
-    correct_yolo_boxes(dets, count, w, h, netw, neth, relative, letter);
-    return count;
-}
-
 // get prediction boxes: yolov2_forward_network.c
 void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
 
@@ -2954,7 +2719,6 @@ void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, f
     free(boxes);
     free_ptrs((void **)probs, l.w*l.h*l.n);
 
-    //correct_region_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative);
     correct_yolo_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative, letter);
 }
 
@@ -2963,13 +2727,9 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
     int j;
     for (j = 0; j < net->n; ++j) {
         layer l = net->layers[j];
-        if (l.type == YOLO) {
-            int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter);
-            dets += count;
-        }
-        if (l.type == REGION) {
+        
+		if (l.type == REGION) {
             custom_get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets, letter);
-            //get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets);
             dets += l.w*l.h*l.n;
         }
     }
@@ -2980,127 +2740,4 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
     return dets;
-}
-
-void *load_thread(void *ptr)
-{
-    load_args a = *(struct load_args*)ptr;
-    if (a.type == IMAGE_DATA) {
-        *(a.im) = load_image(a.path, 0, 0, 3);
-        *(a.resized) = resize_image(*(a.im), a.w, a.h);
-        //printf(" a.path = %s, a.w = %d, a.h = %d \n", a.path, a.w, a.h);
-    }
-    else if (a.type == LETTERBOX_DATA) {
-        printf(" LETTERBOX_DATA isn't implemented \n");
-        getchar();
-        //*(a.im) = load_image(a.path, 0, 0, 0);
-        //*(a.resized) = letterbox_image(*(a.im), a.w, a.h);
-    }
-    else {
-        printf("unknown DATA type = %d \n", a.type);
-        getchar();
-    }
-    free(ptr);
-    return 0;
-}
-
-
-box_label *read_boxes(char *filename, int *n)
-{
-    box_label *boxes = calloc(1, sizeof(box_label));
-    FILE *file = fopen(filename, "r");
-    if (!file)
-    {
-        //file_error(filename);
-        *n = 0;
-        return boxes;
-    }
-    float x, y, h, w;
-    int id;
-    int count = 0;
-    while (fscanf(file, "%d %f %f %f %f", &id, &x, &y, &w, &h) == 5) {
-        boxes = realloc(boxes, (count + 1) * sizeof(box_label));
-        boxes[count].id = id;
-        boxes[count].x = x;
-        boxes[count].y = y;
-        boxes[count].h = h;
-        boxes[count].w = w;
-        boxes[count].left = x - w / 2;
-        boxes[count].right = x + w / 2;
-        boxes[count].top = y - h / 2;
-        boxes[count].bottom = y + h / 2;
-        ++count;
-    }
-    fclose(file);
-    *n = count;
-    return boxes;
-}
-
-typedef struct {
-    box b;
-    float p;
-    int class_id;
-    int image_index;
-    int truth_flag;
-    int unique_truth_index;
-} box_prob;
-
-int detections_comparator(const void *pa, const void *pb)
-{
-    box_prob a = *(box_prob *)pa;
-    box_prob b = *(box_prob *)pb;
-    float diff = a.p - b.p;
-    if (diff < 0) return 1;
-    else if (diff > 0) return -1;
-    return 0;
-}
-
-int nms_comparator_v3(const void *pa, const void *pb)
-{
-    detection a = *(detection *)pa;
-    detection b = *(detection *)pb;
-    float diff = 0;
-    if (b.sort_class >= 0) {
-        diff = a.prob[b.sort_class] - b.prob[b.sort_class];
-    }
-    else {
-        diff = a.objectness - b.objectness;
-    }
-    if (diff < 0) return 1;
-    else if (diff > 0) return -1;
-    return 0;
-}
-
-void do_nms_sort_v3(detection *dets, int total, int classes, float thresh)
-{
-    int i, j, k;
-    k = total - 1;
-    for (i = 0; i <= k; ++i) {
-        if (dets[i].objectness == 0) {
-            detection swap = dets[i];
-            dets[i] = dets[k];
-            dets[k] = swap;
-            --k;
-            --i;
-        }
-    }
-    total = k + 1;
-
-    for (k = 0; k < classes; ++k) {
-        for (i = 0; i < total; ++i) {
-            dets[i].sort_class = k;
-        }
-        qsort(dets, total, sizeof(detection), nms_comparator_v3);
-        for (i = 0; i < total; ++i) {
-            //printf("  k = %d, \t i = %d \n", k, i);
-            if (dets[i].prob[k] == 0) continue;
-            box a = dets[i].bbox;
-            for (j = i + 1; j < total; ++j) {
-                box b = dets[j].bbox;
-                if (box_iou(a, b) > thresh) {
-                    dets[j].prob[k] = 0;
-                }
-            }
-        }
-    }
 }

@@ -257,7 +257,7 @@ extern "C" {
     char *fgetl(FILE *fp);
 
     // utils.c
-    int *read_map(char *filename);
+   // int *read_map(char *filename);
 
     // utils.c
     void del_arg(int argc, char **argv, int index);
@@ -323,7 +323,7 @@ extern "C" {
     } tree;
 
     // tree.c
-    void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves);
+    //void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves);
 
     // -------------- layer.h --------------
 
@@ -718,7 +718,7 @@ extern "C" {
     image load_image(char *filename, int w, int h, int c);
 
     // image.c
-    image load_image_stb(char *filename, int channels);
+    //image (char *filename, int channels);
 
 #ifdef OPENCV
     // image.c
@@ -735,7 +735,7 @@ extern "C" {
     float get_color(int c, int x, int max);
 
     // image.c
-    void save_image_png(image im, const char *name);
+   // void save_image_png(image im, const char *name);
 
     // image.c
     void show_image(image p, const char *name);
@@ -767,14 +767,11 @@ extern "C" {
     // yolov2_forward_network.c - fp32 is used for 1st and last layers during INT8-quantized inference
     void forward_convolutional_layer_cpu(layer l, network_state state);
 
-    // quantizized
-    float *network_predict_quantized(network net, float *input);
-
     // Quantinization and get multiplers for convolutional weights for quantinization
-    void quantinization_and_get_multipliers(network net);
+    //void quantinization_and_get_multipliers(network net);
 
     // 8-bit Inference with TensorRT: http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf
-    float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin);
+    //float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin);
 
     // additionally.c
    // void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, int input_calibration);
