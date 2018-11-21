@@ -17,5 +17,4 @@ How to use **BIT1-XNOR**-inference:
 
 * Then use it for Detection-test:
     * `yolo_cpu.exe detector test tiny-yolo-voc_xnor/voc.names tiny-yolo-voc_xnor/tiny_yolo_xnor.cfg tiny-yolo-voc_xnor/tiny_yolo_xnor.weights -thresh 0.21 person.jpg`
-	* [note: here we provide tiny_yolo_xnor.weights which was trained in voc dataset]
-Other models by the link: https://pjreddie.com/darknet/yolo/
+	* Note: here we provide `tiny_yolo_xnor.weights` which was trained in voc dataset with [tiny_yolo_xnor-train.cfg](bin/tiny-yolo-voc_xnor/tiny_yolo_xnor-train.cfg)
