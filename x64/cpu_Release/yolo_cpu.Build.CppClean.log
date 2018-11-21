@@ -1,0 +1,12 @@
+f:\github\yolo2_light_cpu\x64\cpu_release\main.obj
+f:\github\yolo2_light_cpu\x64\cpu_release\additionally.obj
+f:\github\yolo2_light_cpu\x64\cpu_release\box.obj
+f:\github\yolo2_light_cpu\x64\cpu_release\yolov2_forward_network_quantized.obj
+f:\github\yolo2_light_cpu\x64\cpu_release\yolov2_forward_network.obj
+f:\github\yolo2_light_cpu\x64\cpu_release\vc140.pdb
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\cl.command.1.tlog
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\cl.read.1.tlog
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\cl.write.1.tlog
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\link.command.1.tlog
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\link.read.1.tlog
+f:\github\yolo2_light_cpu\x64\cpu_release\yolo_cpu.tlog\link.write.1.tlog

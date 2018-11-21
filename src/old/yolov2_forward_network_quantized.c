@@ -1,13 +1,12 @@
 #include "additionally.h"    // some definitions from: im2col.h, blas.h, list.h, utils.h, activations.h, tree.h, layer.h, network.h
 // softmax_layer.h, reorg_layer.h, route_layer.h, region_layer.h, maxpool_layer.h, convolutional_layer.h
 
+
 #define W_MAX_VAL (256/2 - 1)    // 7-bit (1-bit sign)
 #define I_MAX_VAL (256/2 - 1)    // 7-bit (1-bit sign)
 #define R_MAX_VAL (256*256/2 - 1)    // 31-bit (1-bit sign)
 
-
 #define R_MULT (32)    // 4 - 32
-
 
 int max_abs(int src, int max_val)
 {
@@ -75,7 +74,6 @@ float get_multiplier(float *arr_ptr, int arr_size, int bits_length)
     return multiplier;
 }
 
-
 // im2col.c
 int8_t im2col_get_pixel_int8(int8_t *im, int height, int width, int channels,
     int row, int col, int channel, int pad)
@@ -141,38 +139,6 @@ void gemm_nn_int8_int16(int M, int N, int K, int8_t ALPHA,
     free(c_tmp);
 }
 
-void gemm_nn_int8_int32(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int32_t *C, int ldc)
-{
-    int32_t *c_tmp = calloc(N, sizeof(int32_t));
-    int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (k = 0; k < K; ++k) {
-            register int16_t A_PART = ALPHA*A[i*lda + k];
-            //#pragma simd parallel for
-            for (j = 0; j < N; ++j) {
-                c_tmp[j] += A_PART*B[k*ldb + j];
-                //C[i*ldc + j] += max_abs(A_PART*B[k*ldb + j] / (R_MULT), (256 * 128 - 1));
-            }
-        }
-        for (j = 0; j < N; ++j) {
-            C[i*ldc + j] += max_abs(c_tmp[j] / (R_MULT), (256 * 128 - 1));
-            c_tmp[j] = 0;
-        }
-    }
-    free(c_tmp);
-}
-
-void gemm_nn_int8_int16_conv16(int M, int N, int K, int8_t ALPHA,
-    int8_t *A, int lda,
-    int8_t *B, int ldb,
-    int16_t *C, int ldc)
-{
-    printf(" gemm_nn_int8_int16_conv16() isn't implemented \n");
-}
-
 void forward_convolutional_layer_q(layer l, network_state state)
 {
 
@@ -182,15 +148,7 @@ void forward_convolutional_layer_q(layer l, network_state state)
     int const out_size = out_h*out_w;
     size_t const weights_size = l.size*l.size*l.c*l.n;
 
-    // fill zero (ALPHA)
-    //for (i = 0; i < l.outputs; ++i) l.output[i] = 0;
-
-    // l.n - number of filters on this layer
-    // l.c - channels of input-array
-    // l.h - height of input-array
-    // l.w - width of input-array
-    // l.size - width and height of filters (the same size for all filters)
-
+    //typedef int32_t conv_t;    // l.output
     typedef int16_t conv_t;    // l.output
     conv_t *output_q = calloc(l.outputs, sizeof(conv_t));
 
@@ -202,15 +160,7 @@ void forward_convolutional_layer_q(layer l, network_state state)
         int16_t src = state.input[z] * l.input_quant_multipler;
         state.input_int8[z] = max_abs(src, I_MAX_VAL);
     }
-
-    ////////////////////////////////////
-    // cudnnConvolutionBiasActivationForward()
-    // y = act ( alpha1 * conv(x) + alpha2 * z + bias )
-    // int8 = activation( float * conv(int8) + float * int8 + float )
-    // int8 = activation( conv(input_int8) + bias_float ) // X_INT8x4 or X_INT8
-    // https://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBiasActivationForward
-    ///////////////////////////////////
-
+	
 
     // 1. Convolution !!!
     int fil;
@@ -232,8 +182,7 @@ void forward_convolutional_layer_q(layer l, network_state state)
     #pragma omp parallel for
     for (t = 0; t < m; ++t) {
         gemm_nn_int8_int16(1, n, k, 1, a + t*k, k, b, n, c + t*n, n);
-        //gemm_nn_int8_int16_conv16(1, n, k, 1, a + t*k, k, b, n, c + t*n, n);
-        //gemm_nn_int8_int32(1, n, k, 1, a + t*k, k, b, n, c + t*n, n); conv_t should be int32_t
+
     }
     //}
 
@@ -245,12 +194,6 @@ void forward_convolutional_layer_q(layer l, network_state state)
     for (i = 0; i < l.outputs; ++i) {
         l.output[i] = output_q[i] * ALPHA1;    // cuDNN: alpha1
     }
-
-    //for (fil = 0; fil < l.n; ++fil) {
-    //    for (j = 0; j < out_size; ++j) {
-    //        l.output[fil*out_size + j] = l.output[fil*out_size + j] * ALPHA1;
-    //    }
-    //}
 
     // cuDNN: y = alpha1 * conv(x) + bias
     for (fil = 0; fil < l.n; ++fil) {
@@ -318,6 +261,26 @@ void forward_maxpool_layer_q(const layer l, network_state state)
     }
 }
 
+
+// Route layer - just copy 1 or more layers into the current layer
+void forward_route_layer_q(const layer l, network_state state)
+{
+    int i, j;
+    int offset = 0;
+    // number of merged layers
+    for (i = 0; i < l.n; ++i) {
+        int index = l.input_layers[i];                    // source layer index
+                                                        //float *input = state.net.layers[index].output;    // source layer output ptr
+        int8_t *input = state.net.layers[index].output_int8;    // source layer output ptr
+        int input_size = l.input_sizes[i];                // source layer size
+                                                        // batch index
+        for (j = 0; j < l.batch; ++j) {
+            memcpy(l.output_int8 + offset + j*l.outputs, input + j*input_size, input_size * sizeof(int8_t));
+        }
+        offset += input_size;
+    }
+}
+
 // ---- region layer ----
 
 static void softmax_q(float *input, int n, float temp, float *output)
@@ -337,7 +300,6 @@ static void softmax_q(float *input, int n, float temp, float *output)
         output[i] /= sum;
     }
 }
-
 
 // Region layer - just change places of array items, then do logistic_activate and softmax
 void forward_region_layer_q(const layer l, network_state state)
@@ -384,8 +346,9 @@ void forward_region_layer_q(const layer l, network_state state)
             l.output[index + 4] = 1.0F / (1.0F + expf(-x));    // logistic_activate_q(l.output[index + 4]);
         }
     }
-	
-	if (l.softmax) {    // Yolo v2
+
+    //else if (l.softmax) 
+	{    // Yolo v2
                             // softmax activation only for Classes probability
         for (b = 0; b < l.batch; ++b) {
             // for each item (x, y, anchor-index)
@@ -409,7 +372,7 @@ void yolov2_forward_network_q(network net, network_state state)
 
         if (l.type == CONVOLUTIONAL) {
             if (i >= 1 && l.activation != LINEAR) forward_convolutional_layer_q(l, state);
-            else forward_convolutional_layer_cpu(l, state);
+            else forward_convolutional_layer_cpu(l, i, state);
 
             printf("\n %d - CONVOLUTIONAL \t\t l.size = %d  \n", i, l.size);
         }
@@ -418,21 +381,33 @@ void yolov2_forward_network_q(network net, network_state state)
             //printf("\n MAXPOOL \t\t l.size = %d  \n", l.size);
         }
         else if (l.type == ROUTE) {
+            //forward_route_layer_cpu(l, state);
+            //printf("\n ROUTE \t\t\t l.n = %d  \n", l.n);
         }
         else if (l.type == REORG) {
+            //forward_reorg_layer_cpu(l, state);
+            //printf("\n REORG \n");
         }
         else if (l.type == UPSAMPLE) {
+            //forward_upsample_layer_cpu(l, state);
+            //printf("\n UPSAMPLE \n");
         }
         else if (l.type == SHORTCUT) {
+            //forward_shortcut_layer_cpu(l, state);
+            //printf("\n SHORTCUT \n");
         }
         else if (l.type == YOLO) {
+            //forward_yolo_layer_cpu(l, state);
+            //printf("\n YOLO \n");
         }
         else if (l.type == REGION) {
             forward_region_layer_cpu(l, state);
+            //printf("\n REGION \n");
         }
         else {
             printf("\n layer: %d \n", l.type);
         }
+
 
         state.input = l.output;
         //state.input_int8 = l.output_int8;
@@ -450,14 +425,6 @@ float *network_predict_quantized(network net, float *input)
     state.truth = 0;
     state.train = 0;
     state.delta = 0;
-    /*/
-    int k;
-    for (k = 0; k < net.w*net.h*net.c; ++k) {
-        //int16_t src = lround(state.input[k] * net.layers[0].input_quant_multipler);
-        int16_t src = state.input[k] * net.layers[0].input_quant_multipler;
-        state.input_int8[k] = max_abs(src, I_MAX_VAL);
-    }
-    */
 
     yolov2_forward_network_q(net, state);    // network on CPU
                                             //float *out = get_network_output(net);
@@ -466,6 +433,7 @@ float *network_predict_quantized(network net, float *input)
     //free(state.input_int8);
     return net.layers[i].output;
 }
+
 
 // --------------------
 // x - last conv-layer output
@@ -503,9 +471,8 @@ void get_region_boxes_q(layer l, int w, int h, float thresh, float **probs, box 
             boxes[index].w *= w;
             boxes[index].h *= h;
 
-            int class_index = index * (l.classes + 5) + 5;
-			            
-            {
+            int class_index = index * (l.classes + 5) + 5;          
+			{
                 // Yolo v2
                 for (j = 0; j < l.classes; ++j) {
                     float prob = scale*predictions[class_index + j];    // prob = IoU(box, object) = t0 * class-probability
@@ -520,119 +487,9 @@ void get_region_boxes_q(layer l, int w, int h, float thresh, float **probs, box 
 }
 
 
-float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin)
-{
-    //const float bin_width = 1.0 / 4096;// 1.0F / 64.0F;
-    //const int max_bin = 2048*2;// 2048;
-    const int max_global_val = max_bin * bin_width;    // 1024    // 32
-    float *m_array = (float*)calloc(max_bin, sizeof(float));
-    float *H_histogram = (float*)calloc(max_bin, sizeof(float));
-    float *P_array = (float*)calloc(max_bin, sizeof(float));
-    float *Q_array = (float*)calloc(max_bin, sizeof(float));
-    float *quant_Q_array = (float*)calloc(128, sizeof(float));    // 128 for INT8
-    uint64_t *quant_Q_array_count = (uint64_t*)calloc(128, sizeof(uint64_t));    // 128 for INT8
-
-    int i, j;
-    {
-        //uint64_t outliers = 0;
-        const int last_bin = max_bin - 1;
-        for (j = 0; j <= last_bin; ++j) P_array[j] = 0;
-        for (j = 0; j < size; ++j) {
-            int bin_num = lround(fabs(src_arr[j]) / bin_width);
-            int bin_num_saturated = (bin_num >= last_bin) ? last_bin : bin_num;
-            H_histogram[bin_num_saturated]++;
-
-            //if (bin_num > last_bin) outliers++;
-            //else H_histogram[bin_num]++;
-        }
-    }
-
-    for (i = 128; i < max_bin; ++i) {    // [1/64; 1024] // [1/64; 32]
-                                        //if (i > max_bin) printf(" i > max_bin = %d, ", i);
-                                        //printf(" %d \r", i);
-                                        // calculate bin histogram
-        uint64_t outliers = 0;
-        const int last_bin = i - 1;
-        for (j = 0; j <= last_bin; ++j) P_array[j] = 0;
-        /*for (j = 0; j < size; ++j) {
-        int bin_num = lround(fabs(src_arr[j]) / bin_width);
-        //int bin_num_saturated = (bin_num >= last_bin) ? last_bin : bin_num;
-        if (bin_num > last_bin) outliers++;
-        else P_array[bin_num]++;
-        }*/
-        for (j = 0; j < max_bin; ++j) {
-            if (j <= last_bin) P_array[j] = H_histogram[j];
-            else outliers += H_histogram[j];
-        }
-        // quantinization P-i-bins to Q-128-bins
-        const float quant_expand_width = i / 128.0F;
-        for (j = 0; j < 128; ++j) quant_Q_array[j] = 0, quant_Q_array_count[j] = 0;
-        for (j = 0; j < i; ++j) {
-            int quant_bin = lround(j / quant_expand_width);
-            if (quant_bin > 127) quant_bin = 127; // printf(" quant_bin > 127 = %d \n", quant_bin);
-            quant_Q_array[quant_bin] += P_array[j];
-            if (P_array[j] != 0) quant_Q_array_count[quant_bin]++;
-        }
-        // expand 128-bins to i-bins
-        for (j = 0; j < i; ++j) Q_array[j] = 0;
-        for (j = 0; j < i; ++j) {
-            int quant_bin = lround(j / quant_expand_width);
-            if (quant_bin > 127) quant_bin = 127;// printf(" quant_bin > 127 = %d \n", quant_bin);
-                                                 //Q_array[j] = llround(quant_Q_array[quant_bin] / quant_expand_width);
-            if (P_array[j] != 0)    // preserve empty bins from original P
-                Q_array[j] = quant_Q_array[quant_bin] / quant_Q_array_count[quant_bin];
-            //printf(" quant_bin = %d, Q[j] = %f = q_Q %f / q_w %f, P = %f \n", quant_bin, Q_array[j], quant_Q_array[quant_bin], quant_expand_width, P_array[j]);
-        }
-        P_array[last_bin] += outliers;    // saturation
-                                        // P /= SUM(P); Q /= SUM(Q);
-        float sum_P = 0, sum_Q = 0, quant_sum_Q = 0;
-        for (j = 0; j < 128; ++j) quant_sum_Q += quant_Q_array[j];
-        for (j = 0; j < i; ++j) {
-            sum_P += P_array[j];
-            sum_Q += Q_array[j];
-            //printf(" P_array = %f, Q_array = %f \n", P_array[j], Q_array[j]);
-        }
-        for (j = 0; j < i; ++j) {
-            P_array[j] /= sum_P;
-            Q_array[j] /= sum_Q;
-        }
-        // KL_divergence(P, Q);
-        for (j = 0; j < i; ++j) {
-            m_array[i] += P_array[j] * (log((P_array[j] + FLT_MIN) / (Q_array[j] + FLT_MIN)));
-            //printf(" p = %f, q = %f, p/q = %f, log(p/q) = %f, m = %f \n", P_array[j], Q_array[j], P_array[j] / Q_array[j], log((P_array[j] + FLT_MIN) / (Q_array[j] + FLT_MIN)), m_array[i]);
-        }
-        //printf("\n i = %d, size = %zu, sum_P = %f, sum_Q = %f, q_sum_Q = %f, q_e_width = %f, m = %f \n", i, size, sum_P, sum_Q, quant_sum_Q, quant_expand_width, m_array[i]);
-        //getchar();
-    }
-
-    float m_index = 128, min_m = FLT_MAX;
-    for (i = 128; i < max_bin; ++i) {
-        if (m_array[i] < min_m) {
-            min_m = m_array[i];
-            m_index = i;
-        }
-    }
-
-    float threshold = (m_index + 0.5) * bin_width;
-    float multiplier = 127 / threshold;
-    printf(" mult = %g, threshold = %g, min_m = %g, m_index = %g \n", multiplier, threshold, min_m, m_index);
-
-    free(H_histogram);
-    free(P_array);
-    free(Q_array);
-    free(quant_Q_array);
-    free(quant_Q_array_count);
-    free(m_array);
-    //getchar();
-
-    return multiplier;
-}
-
-
 // Quantinization and get multiplers for convolutional weights for quantinization
 void quantinization_and_get_multipliers(network net)
 {
-
     // ----------- entropy_calibration(,, 1.0 / 16, 4096); - FULL ----------------------
     //float input_mult[] = { 256, 4,32,64,32,32,32,32,32,64,64,64,64,64,128,64,128,128,64,128,64,128,128 };    // divided 4 - full works
     int counter = 0;
@@ -666,7 +523,6 @@ void quantinization_and_get_multipliers(network net)
 
 
             l->weights_quant_multipler = weights_multiplier_single;
-
 
 
             for (fil = 0; fil < l->n; ++fil) {

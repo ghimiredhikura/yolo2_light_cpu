@@ -13,6 +13,8 @@
 #include <float.h>
 #include <limits.h>
 #include <stdint.h>
+#include <direct.h>
+
 
 #ifdef OPENCV
 #include <opencv2/core/fast_math.hpp>
@@ -142,15 +144,6 @@ extern "C" {
         return 0;
     }
 
-    static void activate_array(float *x, const int n, const ACTIVATION a)
-    {
-        int i;
-        for (i = 0; i < n; ++i) {
-            x[i] = activate(x[i], a);
-        }
-    }
-
-
     // -------------- XNOR-net ------------
 
     // binarize Weights
@@ -173,24 +166,19 @@ extern "C" {
     // -------------- blas.h --------------
 
     // blas.c
-    void gemm_nn(int M, int N, int K, float ALPHA,
-        float *A, int lda, float *B, int ldb, float *C, int ldc);
-
-    // blas.c
-    void fill_cpu(int N, float ALPHA, float *X, int INCX);
 
     void transpose_bin(uint32_t *A, uint32_t *B, const int n, const int m,
         const int lda, const int ldb, const int block_size);
 
-    // AVX2
-    void im2col_cpu_custom(float* data_im,
-        int channels, int height, int width,
-        int ksize, int stride, int pad, float* data_col);
+	// AVX2
+	void im2col_cpu_custom(float* data_im,
+		int channels, int height, int width,
+		int ksize, int stride, int pad, float* data_col);
 
-    // AVX2
-    void im2col_cpu_custom_bin(float* data_im,
-        int channels, int height, int width,
-        int ksize, int stride, int pad, float* data_col, int bit_align);
+	// AVX2
+	void im2col_cpu_custom_bin(float* data_im,
+		int channels, int height, int width,
+		int ksize, int stride, int pad, float* data_col, int bit_align);
 
     // AVX2
     void activate_array_cpu_custom(float *x, const int n, const ACTIVATION a);
@@ -202,14 +190,13 @@ extern "C" {
     // AVX2
     void float_to_bit(float *src, unsigned char *dst, size_t size);
 
-    // AVX2
-    void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
-        unsigned char *A, int lda,
-        unsigned char *B, int ldb,
-        float *C, int ldc, float *mean_arr);
+	// AVX2
+	void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
+		unsigned char *A, int lda,
+		unsigned char *B, int ldb,
+		float *C, int ldc, float *mean_arr);
 
     // -------------- list.h --------------
-
 
     typedef struct node {
         void *val;
@@ -235,10 +222,6 @@ extern "C" {
 
     // list.c
     void free_list(list *l);
-
-    // list.c
-    char **get_labels(char *filename);
-
 
     // -------------- utils.h --------------
 
@@ -302,10 +285,6 @@ extern "C" {
     int max_index(float *a, int n);
 
     // utils.c
-    // From http://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-    float rand_normal();
-
-    // utils.c
     void free_ptrs(void **ptrs, int n);
 
     // --------------  tree.h --------------
@@ -323,7 +302,7 @@ extern "C" {
     } tree;
 
     // tree.c
-    void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves);
+    //void hierarchy_predictions(float *predictions, int n, tree *hier, int only_leaves);
 
     // -------------- layer.h --------------
 
@@ -520,9 +499,6 @@ extern "C" {
         float * mean;
         float * variance;
 
-        //float * mean_delta;
-        //float * variance_delta;
-
         float * rolling_mean;
         float * rolling_variance;
 
@@ -639,25 +615,13 @@ extern "C" {
     // network.c
     network make_network(int n);
 
-
     // network.c
     void set_batch_network(network *net, int b);
-
 
     // -------------- softmax_layer.h --------------
 
     // softmax_layer.c
     softmax_layer make_softmax_layer(int batch, int inputs, int groups);
-
-    // -------------- reorg_layer.h --------------
-
-    // reorg_layer.c
-    layer make_reorg_layer(int batch, int w, int h, int c, int stride, int reverse);
-
-    // -------------- route_layer.h --------------
-
-    // route_layer.c
-    route_layer make_route_layer(int batch, int n, int *input_layers, int *input_sizes);
 
     // -------------- region_layer.h --------------
 
@@ -674,8 +638,6 @@ extern "C" {
 
     // convolutional_layer.c
     convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int n, int size, int stride, int padding, ACTIVATION activation, int batch_normalize, int binary, int xnor, int adam, int quantized, int use_bin_output);
-
-
 
     // -------------- image.c --------------
 
@@ -749,15 +711,11 @@ extern "C" {
     // parser.c
     void load_weights_upto_cpu(network *net, char *filename, int cutoff);
 
-
     // -------------- yolov2_forward_network.c --------------------
 
 
     // detect on CPU: yolov2_forward_network.c
     float *network_predict_cpu(network net, float *input);
-
-    // calculate mAP
-    //void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, int quantized);
 
     // fuse convolutional and batch_norm weights into one convolutional-layer
     void yolov2_fuse_conv_batchnorm(network net);
@@ -765,7 +723,7 @@ extern "C" {
     // -------------- yolov2_forward_network_quantized.c --------------------
 
     // yolov2_forward_network.c - fp32 is used for 1st and last layers during INT8-quantized inference
-    void forward_convolutional_layer_cpu(layer l, network_state state);
+    void forward_convolutional_layer_cpu(layer l, int layer_id, network_state state);
 
     // quantizized
     float *network_predict_quantized(network net, float *input);
@@ -773,22 +731,25 @@ extern "C" {
     // Quantinization and get multiplers for convolutional weights for quantinization
     void quantinization_and_get_multipliers(network net);
 
-    // 8-bit Inference with TensorRT: http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf
-    float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin);
-
-    // additionally.c
-   // void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, int input_calibration);
+    // draw distribution of float values
+    //void draw_distribution(float *arr_ptr, int arr_size, char *name);
 
     // additionally.c
     detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter);
 
     // additionally.c
-    int entry_index(layer l, int batch, int location, int entry);
+    //int entry_index(layer l, int batch, int location, int entry);
 
     // additionally.c
     void free_detections(detection *dets, int n);
 
+	// save probing data
 	int m_dbg;
+
+	void save_convolutional_weights(layer l, int ind);
+	void save_net_param(network net);
+	void save_layer_param(layer l, int count, int lt);
+	void save_layer_data(layer l, int count);
 
     // -------------- gettimeofday for Windows--------------------
 
