@@ -1,6 +1,7 @@
 #include "additionally.h"    // some definitions from: im2col.h, blas.h, list.h, utils.h, activations.h, tree.h, layer.h, network.h
 // softmax_layer.h, reorg_layer.h, route_layer.h, region_layer.h, maxpool_layer.h, convolutional_layer.h
 
+
 // binary transpose
 size_t binary_transpose_align_input(int k, int n, float *b, char **t_bit_input, size_t ldb_align, int bit_align)
 {
@@ -30,7 +31,7 @@ void forward_convolutional_layer_cpu(layer l, int layer_id, network_state state)
         if (!l.align_bit_weights)
         {
             binarize_weights(l.weights, l.n, l.c*l.size*l.size, l.binary_weights);
-            //printf("\n binarize_weights l.align_bit_weights = %p \n", l.align_bit_weights);
+            printf("\n binarize_weights l.align_bit_weights = %p \n", l.align_bit_weights);
         }
         
 		binarize_cpu(state.input, l.c*l.h*l.w*l.batch, l.binary_input);
@@ -91,6 +92,7 @@ void forward_convolutional_layer_cpu(layer l, int layer_id, network_state state)
                     l.output[output_index] += sum;
                 }
     }
+
 
     int const out_size = out_h*out_w;
 

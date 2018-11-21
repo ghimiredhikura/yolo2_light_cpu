@@ -139,12 +139,14 @@ void binary_align_weights(convolutional_layer *l)
     l->align_bit_weights = calloc(l->align_bit_weights_size, sizeof(char));
 
     size_t i, j;
+
     // align A without transpose
     for (i = 0; i < m; ++i) {
         for (j = 0; j < k; ++j) {
             align_weights[i*new_lda + j] = l->binary_weights[i*k + j];
         }
     }
+
     float_to_bit(align_weights, l->align_bit_weights, align_weights_size);
 
     l->mean_arr = calloc(l->n, sizeof(float));
