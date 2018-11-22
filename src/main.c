@@ -23,9 +23,6 @@
 
 #endif
 
-// get prediction boxes: yolov2_forward_network.c
-//void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
-
 typedef struct detection_with_class {
     detection det;
     // The most probable class id: the best class index in this->prob.
@@ -142,13 +139,14 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 
 // --------------- Detect on the Image ---------------
 // Detect on Image: this function uses other functions not from this file
-void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh, int quantized, int dont_show)
+void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh, int dont_show)
 {
     image **alphabet = NULL;
-    network net = parse_network_cfg(cfgfile, 1, quantized);  // parser.c
+    network net = parse_network_cfg(cfgfile, 1);  // parser.c
     if (weightfile) {
         load_weights_upto_cpu(&net, weightfile, net.n);    // parser.c
     }
+
     //set_batch_network(&net, 1);                    // network.c
     srand(2222222);
     yolov2_fuse_conv_batchnorm(net);
@@ -216,7 +214,6 @@ void run_detector(int argc, char **argv)
 {
     int dont_show = find_arg(argc, argv, "-dont_show");
     float thresh = find_float_arg(argc, argv, "-thresh", .25);
-    int quantized = find_arg(argc, argv, "-quantized");
     
 	if (argc < 4) {
         fprintf(stderr, "usage: %s %s [test] [cfg] [weights (optional)]\n", argv[0], argv[1]);
@@ -244,7 +241,7 @@ void run_detector(int argc, char **argv)
     fclose(fp);
     int classes = obj_count;
 
-    if (0 == strcmp(argv[2], "test")) test_detector_cpu(names, cfg, weights, filename, thresh, quantized, dont_show);
+    if (0 == strcmp(argv[2], "test")) test_detector_cpu(names, cfg, weights, filename, thresh, dont_show);
     
     int i;
     for (i = 0; i < obj_count; ++i) free(names[i]);
@@ -268,7 +265,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <function>\n", argv[0]);
         return 0;
     }
-    gpu_index = -1;
 
     run_detector(argc, argv);
 

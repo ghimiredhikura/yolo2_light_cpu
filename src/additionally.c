@@ -10,9 +10,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-// global GPU index: cuda.c
-int gpu_index = 0;
-
 // im2col.c
 float im2col_get_pixel(float *im, int height, int width, int channels,
     int row, int col, int channel, int pad)
@@ -224,8 +221,7 @@ void calculate_binary_weights(network net)
             }
         }
     }
-    //printf("\n calculate_binary_weights Done! \n");
-
+	//printf("\n calculate_binary_weights Done! \n");
 }
 
 static inline void set_bit(unsigned char *const dst, size_t index) {
@@ -462,9 +458,6 @@ void im2col_cpu_custom_bin(float* data_im,
     }
     else {
         printf("\n Error: is no non-optimized version \n");
-        //im2col_cpu(data_im, channels, height, width, ksize, stride, pad, data_col); // must be aligned for transpose after float_to_bin
-        // float_to_bit(b, t_input, src_size);
-        // transpose_bin(t_input, *t_bit_input, k, n, bit_align, new_ldb, 8);
     }
 }
 
@@ -996,11 +989,6 @@ void set_batch_network(network *net, int b)
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
         l.batch = b;
-#ifdef CUDNN
-        if (l.type == CONVOLUTIONAL) {
-            cudnn_convolutional_setup(net->layers + i);
-        }
-#endif
     }
 }
 
@@ -1074,183 +1062,10 @@ softmax_layer make_softmax_layer(int batch, int inputs, int groups)
     l.inputs = inputs;
     l.outputs = inputs;
     l.output = calloc(inputs*batch, sizeof(float));
-    //l.delta = calloc(inputs*batch, sizeof(float));
- 
-	// commented only for this custom version of Yolo v2
-	//l.forward = forward_softmax_layer;
-    //l.backward = backward_softmax_layer;
 
     return l;
 }
 
-// -------------- upsample_layer.c --------------
-/*
-// upsample_layer.c
-layer make_upsample_layer(int batch, int w, int h, int c, int stride)
-{
-    layer l = { 0 };
-    l.type = UPSAMPLE;
-    l.batch = batch;
-    l.w = w;
-    l.h = h;
-    l.c = c;
-    l.out_w = w*stride;
-    l.out_h = h*stride;
-    l.out_c = c;
-    if (stride < 0) {
-        stride = -stride;
-        l.reverse = 1;
-        l.out_w = w / stride;
-        l.out_h = h / stride;
-    }
-    l.stride = stride;
-    l.outputs = l.out_w*l.out_h*l.out_c;
-    l.inputs = l.w*l.h*l.c;
-    //l.delta = calloc(l.outputs*batch, sizeof(float));
-    l.output = calloc(l.outputs*batch, sizeof(float));;
-
-    if (l.reverse) fprintf(stderr, "downsample         %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    else fprintf(stderr, "upsample           %2dx  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    return l;
-}
-
-// -------------- shortcut_layer.c --------------
-
-// shortcut.c
-layer make_shortcut_layer(int batch, int index, int w, int h, int c, int w2, int h2, int c2)
-{
-    fprintf(stderr, "Shortcut Layer: %d\n", index);
-    layer l = { 0 };
-    l.type = SHORTCUT;
-    l.batch = batch;
-    l.w = w2;
-    l.h = h2;
-    l.c = c2;
-    l.out_w = w;
-    l.out_h = h;
-    l.out_c = c;
-    l.outputs = w*h*c;
-    l.inputs = l.outputs;
-
-    l.index = index;
-
-    l.output = calloc(l.outputs*batch, sizeof(float));;
-    return l;
-}
-
-// -------------- reorg_layer.c --------------
-
-// reorg_layer.c
-layer make_reorg_layer(int batch, int w, int h, int c, int stride, int reverse)
-{
-    layer l = { 0 };
-    l.type = REORG;
-    l.batch = batch;
-    l.stride = stride;
-    l.h = h;
-    l.w = w;
-    l.c = c;
-    if (reverse) {
-        l.out_w = w*stride;
-        l.out_h = h*stride;
-        l.out_c = c / (stride*stride);
-    }
-    else {
-        l.out_w = w / stride;
-        l.out_h = h / stride;
-        l.out_c = c*(stride*stride);
-    }
-    l.reverse = reverse;
-    fprintf(stderr, "reorg              /%2d  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", stride, w, h, c, l.out_w, l.out_h, l.out_c);
-    l.outputs = l.out_h * l.out_w * l.out_c;
-    l.inputs = h*w*c;
-    int output_size = l.out_h * l.out_w * l.out_c * batch;
-    l.output = calloc(output_size, sizeof(float));
-    l.output_int8 = calloc(output_size, sizeof(int8_t));
-    //l.delta = calloc(output_size, sizeof(float));
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_reorg_layer;
-    //l.backward = backward_reorg_layer;
-    return l;
-}
-
-// -------------- route_layer.c --------------
-
-// route_layer.c
-route_layer make_route_layer(int batch, int n, int *input_layers, int *input_sizes)
-{
-    fprintf(stderr, "route ");
-    route_layer l = { 0 };
-    l.type = ROUTE;
-    l.batch = batch;
-    l.n = n;
-    l.input_layers = input_layers;
-    l.input_sizes = input_sizes;
-    int i;
-    int outputs = 0;
-    for (i = 0; i < n; ++i) {
-        fprintf(stderr, " %d", input_layers[i]);
-        outputs += input_sizes[i];
-    }
-    fprintf(stderr, "\n");
-    l.outputs = outputs;
-    l.inputs = outputs;
-    //l.delta = calloc(outputs*batch, sizeof(float));
-    l.output = calloc(outputs*batch, sizeof(float));
-    l.output_int8 = calloc(outputs*batch, sizeof(int8_t));
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_route_layer;
-    //l.backward = backward_route_layer;
-    return l;
-}
-
-// -------------- yolo_layer.c --------------
-
-
-layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int classes, int max_boxes)
-{
-    int i;
-    layer l = { 0 };
-    l.type = YOLO;
-
-    l.n = n;
-    l.total = total;
-    l.batch = batch;
-    l.h = h;
-    l.w = w;
-    l.c = n*(classes + 4 + 1);
-    l.out_w = l.w;
-    l.out_h = l.h;
-    l.out_c = l.c;
-    l.classes = classes;
-    l.cost = calloc(1, sizeof(float));
-    l.biases = calloc(total * 2, sizeof(float));
-    if (mask) l.mask = mask;
-    else {
-        l.mask = calloc(n, sizeof(int));
-        for (i = 0; i < n; ++i) {
-            l.mask[i] = i;
-        }
-    }
-    //l.bias_updates = calloc(n * 2, sizeof(float));
-    l.outputs = h*w*n*(classes + 4 + 1);
-    l.inputs = l.outputs;
-    l.max_boxes = max_boxes;
-    l.truths = l.max_boxes*(4 + 1);    // 90*(4 + 1);
-    //l.delta = calloc(batch*l.outputs, sizeof(float));
-    l.output = calloc(batch*l.outputs, sizeof(float));
-    for (i = 0; i < total * 2; ++i) {
-        l.biases[i] = .5;
-    }
-
-    fprintf(stderr, "yolo\n");
-    srand(0);
-
-    return l;
-}
-*/
 // -------------- region_layer.c --------------
 
 //  region_layer.c
@@ -1277,10 +1092,6 @@ region_layer make_region_layer(int batch, int w, int h, int n, int classes, int 
     for (i = 0; i < n * 2; ++i) {
         l.biases[i] = .5;
     }
-
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_region_layer;
-    //l.backward = backward_region_layer;
 
     fprintf(stderr, "detection\n");
     srand(0);
@@ -1312,10 +1123,6 @@ maxpool_layer make_maxpool_layer(int batch, int h, int w, int c, int size, int s
     l.indexes = calloc(output_size, sizeof(int));
     l.output = calloc(output_size, sizeof(float));
     l.output_int8 = calloc(output_size, sizeof(int8_t));
-    //l.delta = calloc(output_size, sizeof(float));
-    // commented only for this custom version of Yolo v2
-    //l.forward = forward_maxpool_layer;
-    //l.backward = backward_maxpool_layer;
     fprintf(stderr, "max          %d x %d / %d  %4d x%4d x%4d   ->  %4d x%4d x%4d\n", size, size, stride, w, h, c, l.out_w, l.out_h, l.out_c);
     return l;
 }
@@ -1384,10 +1191,6 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.output_int8 = calloc(l.batch*l.outputs, sizeof(int8_t));
     //l.delta = calloc(l.batch*l.outputs, sizeof(float));
 
-    // commented only for this custom version of Yolo v2
-    ///l.forward = forward_convolutional_layer;
-    ///l.backward = backward_convolutional_layer;
-    ///l.update = update_convolutional_layer;
     if (binary) {
         l.binary_weights = calloc(c*n*size*size, sizeof(float));
         l.cweights = calloc(c*n*size*size, sizeof(char));
@@ -1606,33 +1409,6 @@ image load_image(char *filename, int w, int h, int c)
     }
     return out;
 }
-
-/*
-// image.c
-image load_image_stb(char *filename, int channels)
-{
-    int w, h, c;
-    unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
-    if (!data) {
-        fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
-        exit(0);
-    }
-    if (channels) c = channels;
-    int i, j, k;
-    image im = make_image(w, h, c);
-    for (k = 0; k < c; ++k) {
-        for (j = 0; j < h; ++j) {
-            for (i = 0; i < w; ++i) {
-                int dst_index = i + w*j + w*h*k;
-                int src_index = k + c*i + c*w*j;
-                im.data[dst_index] = (float)data[src_index] / 255.;
-            }
-        }
-    }
-    free(data);
-    return im;
-}
-*/
 
 #ifdef OPENCV
 
@@ -1972,14 +1748,6 @@ void load_convolutional_weights_cpu(layer l, FILE *fp)
         fread(l.rolling_variance, sizeof(float), l.n, fp);
     }
     fread(l.weights, sizeof(float), num, fp);
-    /*    if (l.adam) {
-    fread(l.m, sizeof(float), num, fp);
-    fread(l.v, sizeof(float), num, fp);
-    }
-    if (l.flipped) {
-    transpose_matrix(l.weights, l.c*l.size*l.size, l.n);
-    }*/
-    //if (l.binary) binarize_weights(l.weights, l.n, l.c*l.size*l.size, l.weights);
 }
 
 // parser.c
@@ -2004,7 +1772,6 @@ void load_weights_upto_cpu(network *net, char *filename, int cutoff)
         fread(&iseen, sizeof(int), 1, fp);
         *net->seen = iseen;
     }
-    //int transpose = (major > 1000) || (minor > 1000);
 
     int i;
     for (i = 0; i < net->n && i < cutoff; ++i) {
@@ -2017,8 +1784,6 @@ void load_weights_upto_cpu(network *net, char *filename, int cutoff)
     fprintf(stderr, "Done!\n");
     fclose(fp);
 }
-
-
 
 // parser.c
 convolutional_layer parse_convolutional(list *options, size_params params)
@@ -2088,7 +1853,7 @@ layer parse_region(list *options, size_params params)
     l.class_scale = option_find_float(options, "class_scale", 1);
     l.bias_match = option_find_int_quiet(options, "bias_match", 0);
 
-    char *tree_file = option_find_str(options, "tree", 0);
+   // char *tree_file = option_find_str(options, "tree", 0);
    // if (tree_file) l.softmax_tree = read_tree(tree_file);
    // char *map_file = option_find_str(options, "map", 0);
    // if (map_file) l.map = read_map(map_file);
@@ -2110,74 +1875,7 @@ layer parse_region(list *options, size_params params)
     return l;
 }
 
-/*
-// parser.c
-int *parse_yolo_mask(char *a, int *num)
-{
-    int *mask = 0;
-    if (a) {
-        int len = strlen(a);
-        int n = 1;
-        int i;
-        for (i = 0; i < len; ++i) {
-            if (a[i] == ',') ++n;
-        }
-        mask = calloc(n, sizeof(int));
-        for (i = 0; i < n; ++i) {
-            int val = atoi(a);
-            mask[i] = val;
-            a = strchr(a, ',') + 1;
-        }
-        *num = n;
-    }
-    return mask;
-}
 
-
-// parser.c
-layer parse_yolo(list *options, size_params params)
-{
-    int classes = option_find_int(options, "classes", 20);
-    int total = option_find_int(options, "num", 1);
-    int num = total;
-
-    char *a = option_find_str(options, "mask", 0);
-    int *mask = parse_yolo_mask(a, &num);
-    int max_boxes = option_find_int_quiet(options, "max", 90);
-    layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes, max_boxes);
-    if (l.outputs != params.inputs) {
-        printf("Error: l.outputs == params.inputs \n");
-        printf("filters= in the [convolutional]-layer doesn't correspond to classes= or mask= in [yolo]-layer \n");
-        exit(EXIT_FAILURE);
-    }
-    //assert(l.outputs == params.inputs);
-    char *map_file = option_find_str(options, "map", 0);
-    if (map_file) l.map = read_map(map_file);
-
-    l.jitter = option_find_float(options, "jitter", .2);
-    l.focal_loss = option_find_int_quiet(options, "focal_loss", 0);
-
-    l.ignore_thresh = option_find_float(options, "ignore_thresh", .5);
-    l.truth_thresh = option_find_float(options, "truth_thresh", 1);
-    l.random = option_find_int_quiet(options, "random", 0);
-
-    a = option_find_str(options, "anchors", 0);
-    if (a) {
-        int len = strlen(a);
-        int n = 1;
-        int i;
-        for (i = 0; i < len; ++i) {
-            if (a[i] == ',') ++n;
-        }
-        for (i = 0; i < n && i < total * 2; ++i) {
-            float bias = atof(a);
-            l.biases[i] = bias;
-            a = strchr(a, ',') + 1;
-        }
-    }
-    return l;
-}
-*/
 // parser.c
 softmax_layer parse_softmax(list *options, size_params params)
 {
@@ -2206,95 +1904,6 @@ maxpool_layer parse_maxpool(list *options, size_params params)
     maxpool_layer layer = make_maxpool_layer(batch, h, w, c, size, stride, padding);
     return layer;
 }
-/*
-// parser.c
-layer parse_reorg(list *options, size_params params)
-{
-    int stride = option_find_int(options, "stride", 1);
-    int reverse = option_find_int_quiet(options, "reverse", 0);
-
-    int batch, h, w, c;
-    h = params.h;
-    w = params.w;
-    c = params.c;
-    batch = params.batch;
-    if (!(h && w && c)) error("Layer before reorg layer must output image.");
-
-    layer layer = make_reorg_layer(batch, w, h, c, stride, reverse);
-    return layer;
-}
-
-// parser.c
-layer parse_upsample(list *options, size_params params, network net)
-{
-
-    int stride = option_find_int(options, "stride", 2);
-    layer l = make_upsample_layer(params.batch, params.w, params.h, params.c, stride);
-    l.scale = option_find_float_quiet(options, "scale", 1);
-    return l;
-}
-
-// parser.c
-layer parse_shortcut(list *options, size_params params, network net)
-{
-    char *l = option_find(options, "from");
-    int index = atoi(l);
-    if (index < 0) index = params.index + index;
-
-    int batch = params.batch;
-    layer from = net.layers[index];
-
-    layer s = make_shortcut_layer(batch, index, params.w, params.h, params.c, from.out_w, from.out_h, from.out_c);
-
-    char *activation_s = option_find_str(options, "activation", "linear");
-    ACTIVATION activation = get_activation(activation_s);
-    s.activation = activation;
-    return s;
-}
-
-// parser.c
-route_layer parse_route(list *options, size_params params, network net)
-{
-    char *l = option_find(options, "layers");
-    int len = strlen(l);
-    if (!l) error("Route Layer must specify input layers");
-    int n = 1;
-    int i;
-    for (i = 0; i < len; ++i) {
-        if (l[i] == ',') ++n;
-    }
-
-    int *layers = calloc(n, sizeof(int));
-    int *sizes = calloc(n, sizeof(int));
-    for (i = 0; i < n; ++i) {
-        int index = atoi(l);
-        l = strchr(l, ',') + 1;
-        if (index < 0) index = params.index + index;
-        layers[i] = index;
-        sizes[i] = net.layers[index].outputs;
-    }
-    int batch = params.batch;
-
-    route_layer layer = make_route_layer(batch, n, layers, sizes);
-
-    convolutional_layer first = net.layers[layers[0]];
-    layer.out_w = first.out_w;
-    layer.out_h = first.out_h;
-    layer.out_c = first.out_c;
-    for (i = 1; i < n; ++i) {
-        int index = layers[i];
-        convolutional_layer next = net.layers[index];
-        if (next.out_w == first.out_w && next.out_h == first.out_h) {
-            layer.out_c += next.out_c;
-        }
-        else {
-            layer.out_h = layer.out_w = layer.out_c = 0;
-        }
-    }
-
-    return layer;
-}
-*/
 
 // parser.c
 void free_section(section *s)
@@ -2445,17 +2054,16 @@ void parse_net_options(list *options, network *net)
 }
 
 // parser.c
-network parse_network_cfg(char *filename, int batch, int quantized)
+network parse_network_cfg(char *filename, int batch)
 {
     list *sections = read_cfg(filename);
     node *n = sections->front;
     if (!n) error("Config file has no sections");
     network net = make_network(sections->size - 1);
-    net.quantized = quantized;
+    net.quantized = 0;
     net.do_input_calibration = 0;
-    net.gpu_index = gpu_index;
     size_params params;
-    params.quantized = quantized;
+    params.quantized = 0;
 
     section *s = (section *)n->val;
     list *options = s->options;
@@ -2515,6 +2123,7 @@ network parse_network_cfg(char *filename, int batch, int quantized)
         else {
             fprintf(stderr, "Type not recognized: %s\n", s->type);
         }
+
         l.dontload = option_find_int_quiet(options, "dontload", 0);
         l.dontloadscales = option_find_int_quiet(options, "dontloadscales", 0);
         option_unused(options);
@@ -2530,6 +2139,7 @@ network parse_network_cfg(char *filename, int batch, int quantized)
             params.inputs = l.outputs;
         }
     }
+
     free_list(sections);
     net.outputs = get_network_output_size(net);
     net.output = get_network_output(net);
@@ -2587,31 +2197,15 @@ int entry_index(layer l, int batch, int location, int entry)
     return batch*l.outputs + n*l.w*l.h*(4 + l.classes + 1) + entry*l.w*l.h + loc;
 }
 
-int yolo_num_detections(layer l, float thresh)
-{
-    int i, n;
-    int count = 0;
-    for (i = 0; i < l.w*l.h; ++i) {
-        for (n = 0; n < l.n; ++n) {
-            int obj_index = entry_index(l, 0, n*l.w*l.h + i, 4);
-            if (l.output[obj_index] > thresh) {
-                ++count;
-            }
-        }
-    }
-    return count;
-}
-
 int num_detections(network *net, float thresh)
 {
     int i;
     int s = 0;
     for (i = 0; i < net->n; ++i) {
         layer l = net->layers[i];
-        if (l.type == YOLO) {
-            s += yolo_num_detections(l, thresh);
-        }
-        if (l.type == DETECTION || l.type == REGION) {
+        
+		if (l.type == DETECTION || l.type == REGION) 
+		{
             s += l.w*l.h*l.n;
         }
     }
@@ -2680,7 +2274,8 @@ void correct_yolo_boxes(detection *dets, int n, int w, int h, int netw, int neth
         new_w = netw;
         new_h = neth;
     }
-    for (i = 0; i < n; ++i) {
+    
+	for (i = 0; i < n; ++i) {
         box b = dets[i].bbox;
         b.x = (b.x - (netw - new_w) / 2. / netw) / ((float)new_w / netw);
         b.y = (b.y - (neth - new_h) / 2. / neth) / ((float)new_h / neth);

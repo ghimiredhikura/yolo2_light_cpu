@@ -33,8 +33,6 @@
 extern "C" {
 #endif
 
-    extern int gpu_index;
-
     // -------------- im2col.h --------------
 
     // im2col.c
@@ -619,7 +617,6 @@ extern "C" {
         float saturation;
         float hue;
 
-        int gpu_index;
         tree *hierarchy;
         int do_input_calibration;
     } network;
@@ -744,7 +741,7 @@ extern "C" {
     // -------------- parser.c --------------------
 
     // parser.c
-    network parse_network_cfg(char *filename, int batch, int quantized);
+    network parse_network_cfg(char *filename, int batch);
 
     // parser.c
     void load_weights_upto_cpu(network *net, char *filename, int cutoff);

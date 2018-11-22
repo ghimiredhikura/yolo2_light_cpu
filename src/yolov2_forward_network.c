@@ -31,7 +31,7 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
 
     if (l.xnor) 
 	{
-        if (!l.align_bit_weights) // not used here because a l.align_bit_weights are present. 
+        if (!l.align_bit_weights) // not used here because a l.align_bit_weights are present.
         {
             binarize_weights(l.weights, l.n, l.c*l.size*l.size, l.binary_weights);
             printf("\n binarize_weights l.align_bit_weights = %p \n", l.align_bit_weights);
@@ -93,7 +93,6 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
     }
 #else
 
-
     int m = l.n;
     int k = l.size*l.size*l.c;
     int n = out_h*out_w;
@@ -103,13 +102,11 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
 
     // convolution as GEMM (as part of BLAS)
     for (i = 0; i < l.batch; ++i) {
-        //im2col_cpu(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b);    // im2col.c
-        //im2col_cpu_custom(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b);    // AVX2
 
         // XNOR-net - bit-1: weights, input, calculation
         if (l.xnor && (l.stride == 1 && l.pad == 1)) {
-            memset(b, 0, l.bit_align*l.size*l.size*l.c * sizeof(float));
-            //im2col_cpu_custom_align(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b, l.bit_align);
+
+			memset(b, 0, l.bit_align*l.size*l.size*l.c * sizeof(float));
             im2col_cpu_custom_bin(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b, l.bit_align);
 
             int ldb_align = l.lda_align;
@@ -119,10 +116,6 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
 
             // 5x times faster than gemm()-float32
             gemm_nn_custom_bin_mean_transposed(m, n, k, 1, l.align_bit_weights, new_ldb, t_bit_input, new_ldb, c, n, l.mean_arr);
-
-            //gemm_nn_custom_bin_mean_transposed(m, n, k, 1, bit_weights, k, t_bit_input, new_ldb, c, n, mean_arr);
-
-            //free(t_input);
             free(t_bit_input);
         }
         else {
@@ -173,14 +166,14 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
     }
 
     // 4. Activation function (LEAKY or LINEAR)
-    //if (l.activation == LEAKY) {
-    //    for (i = 0; i < l.n*out_size; ++i) {
-    //        l.output[i] = leaky_activate(l.output[i]);
-    //    }
-    //}
-    //activate_array_cpu_custom(l.output, l.n*out_size, l.activation);
-    activate_array_cpu_custom(l.output, l.outputs*l.batch, l.activation);
-
+    if (l.activation == LEAKY) {
+        for (i = 0; i < l.n*out_size; ++i) {
+            l.output[i] = leaky_activate(l.output[i]);
+        }
+    }
+	
+	// original option, if you have any other (other then LEAKY and LINEAR) activation option use below function. 
+	//activate_array_cpu_custom(l.output, l.outputs*l.batch, l.activation);
 }
 
 // MAX pooling layer
@@ -217,8 +210,7 @@ void forward_maxpool_layer_cpu(const layer l, network_state state)
                             int cur_h = h_offset + i*l.stride + n;
                             int cur_w = w_offset + j*l.stride + m;
                             int index = cur_w + l.w*(cur_h + l.h*(k + b*l.c));
-                            int valid = (cur_h >= 0 && cur_h < l.h &&
-                                cur_w >= 0 && cur_w < l.w);
+                            int valid = (cur_h >= 0 && cur_h < l.h && cur_w >= 0 && cur_w < l.w);
                             float val = (valid != 0) ? state.input[index] : -FLT_MAX;
                             max_i = (val > max) ? index : max_i;    // get max index
                             max = (val > max) ? val : max;            // get max value
@@ -284,7 +276,6 @@ void forward_region_layer_cpu(const layer l, network_state state)
         free(swap);
     }
 
-
     // logistic activation only for: t0 (where is t0 = Probability * IoU(box, object))
     for (b = 0; b < l.batch; ++b) {
         // for each item (x, y, anchor-index)
@@ -305,7 +296,6 @@ void forward_region_layer_cpu(const layer l, network_state state)
             }
         }
     }
-
 }
 
 
@@ -325,7 +315,8 @@ void yolov2_forward_network_cpu(network net, network_state state)
             forward_maxpool_layer_cpu(l, state);
             //printf("\n MAXPOOL \t\t l.size = %d  \n", l.size);
         }
-        else if (l.type == ROUTE) {
+        
+		/*else if (l.type == ROUTE) {
         }
         else if (l.type == REORG) {
         }
@@ -334,8 +325,10 @@ void yolov2_forward_network_cpu(network net, network_state state)
         else if (l.type == SHORTCUT) {
         }
         else if (l.type == YOLO) {
-        }
-        else if (l.type == REGION) {
+        }*/
+
+        else if (l.type == REGION) 
+		{
             forward_region_layer_cpu(l, state);
         }
         else {
@@ -357,7 +350,7 @@ float *network_predict_cpu(network net, float *input)
     state.truth = 0;
     state.train = 0;
     state.delta = 0;
-    yolov2_forward_network_cpu(net, state);    // network on CPU
+    yolov2_forward_network_cpu(net, state); // network on CPU
                                             //float *out = get_network_output(net);
     int i;
     for (i = net.n - 1; i > 0; --i) if (net.layers[i].type != COST) break;
