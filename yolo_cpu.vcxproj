@@ -150,8 +150,6 @@
   <ItemGroup>
     <ClInclude Include="src\additionally.h" />
     <ClInclude Include="src\box.h" />
-    <ClInclude Include="src\stb_image.h" />
-    <ClInclude Include="src\stb_image_write.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

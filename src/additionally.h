@@ -646,16 +646,6 @@ extern "C" {
     // softmax_layer.c
     softmax_layer make_softmax_layer(int batch, int inputs, int groups);
 
-    // -------------- reorg_layer.h --------------
-
-    // reorg_layer.c
-    layer make_reorg_layer(int batch, int w, int h, int c, int stride, int reverse);
-
-    // -------------- route_layer.h --------------
-
-    // route_layer.c
-    route_layer make_route_layer(int batch, int n, int *input_layers, int *input_sizes);
-
     // -------------- region_layer.h --------------
 
     //  region_layer.c
@@ -671,8 +661,7 @@ extern "C" {
 
     // convolutional_layer.c
     convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int n, int size, int stride, int padding, ACTIVATION activation, int batch_normalize, int binary, int xnor, int adam, int quantized, int use_bin_output);
-
-
+	
 
     // -------------- image.c --------------
 
@@ -753,9 +742,6 @@ extern "C" {
     // detect on CPU: yolov2_forward_network.c
     float *network_predict_cpu(network net, float *input);
 
-    // calculate mAP
-    //void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, int quantized);
-
     // fuse convolutional and batch_norm weights into one convolutional-layer
     void yolov2_fuse_conv_batchnorm(network net);
 
@@ -763,15 +749,6 @@ extern "C" {
 
     // yolov2_forward_network.c - fp32 is used for 1st and last layers during INT8-quantized inference
     void forward_convolutional_layer_cpu(layer l, network_state state);
-
-    // Quantinization and get multiplers for convolutional weights for quantinization
-    //void quantinization_and_get_multipliers(network net);
-
-    // 8-bit Inference with TensorRT: http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf
-    //float entropy_calibration(float *src_arr, const size_t size, const float bin_width, const int max_bin);
-
-    // additionally.c
-   // void validate_calibrate_valid(char *datacfg, char *cfgfile, char *weightfile, int input_calibration);
 
     // additionally.c
     detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter);

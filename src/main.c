@@ -143,7 +143,9 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
 {
     image **alphabet = NULL;
     network net = parse_network_cfg(cfgfile, 1);  // parser.c
-    if (weightfile) {
+    
+	if (weightfile) 
+	{
         load_weights_upto_cpu(&net, weightfile, net.n);    // parser.c
     }
 

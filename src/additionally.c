@@ -5,10 +5,10 @@
 #include <omp.h>
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+//#define STB_IMAGE_IMPLEMENTATION
+//#include "stb_image.h"
+//#define STB_IMAGE_WRITE_IMPLEMENTATION
+//#include "stb_image_write.h"
 
 // im2col.c
 float im2col_get_pixel(float *im, int height, int width, int channels,
@@ -116,6 +116,7 @@ static inline unsigned char xnor(unsigned char a, unsigned char b) {
     return !(a^b);
 }
 
+
 // INT-32
 static inline uint32_t get_bit_int32(uint32_t const*const src, size_t index) {
     size_t src_i = index / 32;
@@ -124,9 +125,11 @@ static inline uint32_t get_bit_int32(uint32_t const*const src, size_t index) {
     return val;
 }
 
+
 static inline uint32_t xnor_int32(uint32_t a, uint32_t b) {
     return ~(a^b);
 }
+
 
 static inline uint64_t xnor_int64(uint64_t a, uint64_t b) {
     return ~(a^b);
@@ -138,10 +141,12 @@ static inline uint32_t fill_bit_int32(char src) {
     else return  0xFFFFFFFF;
 }
 
+
 static inline uint64_t fill_bit_int64(char src) {
     if (src == 0) return 0x0000000000000000;
     else return  0xFFFFFFFFFFFFFFFF;
 }
+
 
 void binary_int32_printf(uint32_t src) {
     int i;
@@ -152,6 +157,7 @@ void binary_int32_printf(uint32_t src) {
     }
     printf("\n");
 }
+
 
 void binary_int64_printf(uint64_t src) {
     int i;
