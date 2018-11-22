@@ -21,7 +21,6 @@ size_t binary_transpose_align_input(int k, int n, float *b, char **t_bit_input, 
 // 4 layers in 1: convolution, batch-normalization, BIAS and activation
 void forward_convolutional_layer_cpu(layer l, network_state state)
 {
-
     int out_h = (l.h + 2 * l.pad - l.size) / l.stride + 1;    // output_height=input_height for stride=1 and pad=1
     int out_w = (l.w + 2 * l.pad - l.size) / l.stride + 1;    // output_width=input_width for stride=1 and pad=1
     int i, f, j;
@@ -128,7 +127,6 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
         }
         c += n*m;
         state.input += l.c*l.h*l.w;
-
     }
 
 #endif
@@ -155,15 +153,16 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
         }
     }
 
-    // 3. Add BIAS
-    //if (l.batch_normalize)
-    for (int b=0; b<l.batch; b++) {
-	    for (i = 0; i < l.n; ++i) {
-		    for (j = 0; j < out_size; ++j) {
-			    l.output[i*out_size + j+b*l.outputs] += l.biases[i];
-		    }
-	    }
-    }
+	// 3. Add BIAS
+	for (int b=0; b<l.batch; b++) {
+		for (i = 0; i < l.n; ++i) {
+			for (j = 0; j < out_size; ++j) {
+				l.output[i*out_size + j+b*l.outputs] += l.biases[i];
+			}
+			//printf("%lf\n", l.biases[i]);
+		}
+		//printf("\n");
+	}
 
     // 4. Activation function (LEAKY or LINEAR)
     if (l.activation == LEAKY) {
@@ -171,19 +170,23 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
             l.output[i] = leaky_activate(l.output[i]);
         }
     }
-	
-	// original option, if you have any other (other then LEAKY and LINEAR) activation option use below function. 
+	else if (l.activation == LINEAR) {
+		// Do Nothing. 
+	}
+	//original option, if you have any other (other then LEAKY and LINEAR) activation option use below function instead of 4. 
 	//activate_array_cpu_custom(l.output, l.outputs*l.batch, l.activation);
 }
 
 // MAX pooling layer
 void forward_maxpool_layer_cpu(const layer l, network_state state)
 {
-    if (!state.train) {
+    //if (!state.train) 
+	{
         forward_maxpool_layer_avx(state.input, l.output, l.indexes, l.size, l.w, l.h, l.out_w, l.out_h, l.c, l.pad, l.stride, l.batch);
-        return;
+    //  return;
     }
 
+	/*
     int b, i, j, k, m, n;
     const int w_offset = -l.pad;
     const int h_offset = -l.pad;
@@ -222,6 +225,7 @@ void forward_maxpool_layer_cpu(const layer l, network_state state)
             }
         }
     }
+	*/
 }
 
 static void softmax_cpu(float *input, int n, float temp, float *output)

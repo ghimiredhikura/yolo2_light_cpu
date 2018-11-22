@@ -381,7 +381,9 @@ void im2col_cpu_custom_bin(float* data_im,
             int w_offset = c % ksize;
             int h_offset = (c / ksize) % ksize;
             int c_im = c / ksize / ksize;
-            for (h = pad; h < height_col - pad; ++h) {
+            
+			for (h = pad; h < height_col - pad; ++h) 
+			{
                 for (w = pad; w < width_col - pad - 8; w += 1) {
                     int im_row = h_offset + h - pad;
                     int im_col = w_offset + w - pad;
