@@ -198,6 +198,7 @@ void binary_align_weights(convolutional_layer *l)
             align_weights[i*new_lda + j] = l->binary_weights[i*k + j];
         }
     }
+
     float_to_bit(align_weights, l->align_bit_weights, align_weights_size);
 
     l->mean_arr = calloc(l->n, sizeof(float));
@@ -212,11 +213,9 @@ void calculate_binary_weights(network net)
     for (j = 0; j < net.n; ++j) {
         layer *l = &net.layers[j];
 
-        if (l->type == CONVOLUTIONAL) {
-            //printf(" Merges Convolutional-%d and batch_norm \n", j);
-
-            if (l->xnor) {
-                //printf("\n %d \n", j);
+        if (l->type == CONVOLUTIONAL) 
+		{
+			if (l->xnor) {
                 l->lda_align = 256; // 256bit for AVX2
 
                 binary_align_weights(l);
@@ -225,9 +224,12 @@ void calculate_binary_weights(network net)
                     l->activation = LINEAR;
                 }
             }
+
+			if(m_dbg) {
+				save_convolutional_weights(*l, j);
+			}
         }
     }
-	//printf("\n calculate_binary_weights Done! \n");
 }
 
 static inline void set_bit(unsigned char *const dst, size_t index) {
@@ -503,8 +505,7 @@ void forward_maxpool_layer_avx(float *src, float *dst, int *indexes, int size, i
                             int cur_h = h_offset + i*stride + n;
                             int cur_w = w_offset + j*stride + m;
                             int index = cur_w + w*(cur_h + h*(k + b*c));
-                            int valid = (cur_h >= 0 && cur_h < h &&
-                                cur_w >= 0 && cur_w < w);
+                            int valid = (cur_h >= 0 && cur_h < h && cur_w >= 0 && cur_w < w);
                             float val = (valid != 0) ? src[index] : -FLT_MAX;
                             max_i = (val > max) ? index : max_i;
                             max = (val > max) ? val : max;
@@ -2343,4 +2344,107 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
     return dets;
+}
+
+
+// save weights/input/output/parameters
+void save_convolutional_weights(layer l, int ind)
+{
+	char fn_conv[256], fn_norm[256];
+	fprintf(stderr, "layer %d: writing weights...", ind + 1);
+	sprintf(fn_conv, "dbg/conv_weights_%02d.txt", ind + 1);
+	sprintf(fn_norm, "dbg/batchnorm_parameters_%02d.txt", ind + 1);
+	FILE *fp_conv = fopen(fn_conv, "w");
+	FILE *fp_norm = fopen(fn_norm, "w");
+
+	for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.biases[i]);
+	fprintf(fp_norm, "\n\n");
+	if (l.batch_normalize && (!l.dontloadscales)) {
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.scales[i]);
+		fprintf(fp_norm, "\n\n");
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.rolling_mean[i]);
+		fprintf(fp_norm, "\n\n");
+		for (int i = 0; i < l.n; i++) fprintf(fp_norm, "%f ", l.rolling_variance[i]);
+		fprintf(fp_norm, "\n\n");
+	}
+	if (l.xnor) {
+		// save align_mean_array values 
+		for (int i = 0; i < l.n; i++) fprintf(fp_conv, "%f ", l.mean_arr[i]);
+		fprintf(fp_conv, "\n\n");
+		int num = l.n*l.c*l.size*l.size;
+		for (int i = 0; i < num; i++) fprintf(fp_conv, "%d ", (l.binary_weights[i] > 0) ? 1 : 0);
+		//for (int i = 0; i < num; i++) fprintf(fp_conv, "%f ", l.binary_weights[i]);
+	}
+	else {
+		int num = l.n*l.c*l.size*l.size;
+		for (int i = 0; i < num; i++) fprintf(fp_conv, "%f ", l.weights[i]);
+	}
+
+	fclose(fp_conv);
+	fclose(fp_norm);
+	fprintf(stderr, "done.\n");
+}
+
+void save_conv_layer_input_data(layer l, network_state state, int count)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d[conv]: writing layer input data...", count);
+	sprintf(buf, "dbg/layer_%02d[conv]_input_data_%04d_%04d_%04d.txt", count, l.w, l.h, l.c);
+	FILE *fp = fopen(buf, "w");
+	
+	int m = l.c*l.h*l.w*l.batch;
+
+	for (int i = 0; i < m; i++) {
+		if (l.xnor)	fprintf(fp, "%.f ", state.input[i]);
+		else fprintf(fp, "%f ", state.input[i]);
+	}
+
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+void save_maxpool_layer_input_data(layer l, network_state state, int count)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d[maxpool]: writing layer input data...", count);
+	sprintf(buf, "dbg/layer_%02d[maxpool]_input_data_%04d_%04d_%04d.txt", count, l.w, l.h, l.c);
+	FILE *fp = fopen(buf, "w");
+
+	int m = l.c*l.h*l.w*l.batch;
+
+	for (int i = 0; i < m; i++) {
+		fprintf(fp, "%f ", state.input[i]);
+	}
+
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+void save_layer_outout_data(layer l, int count, int layer_type_custom)
+{
+	char buf[256];
+	
+	fprintf(stderr, "layer %d: writing layer output data...", count);
+	if(layer_type_custom==0) sprintf(buf, "dbg/layer_%02d[conv]_output_data_%04d_%04d_%04d_%08d.txt", count, l.out_w, l.out_h, l.out_c, l.outputs);
+	else if(layer_type_custom==1) sprintf(buf, "dbg/layer_%02d[maxpool]_output_data_%04d_%04d_%04d_%08d.txt", count, l.out_w, l.out_h, l.out_c, l.outputs);
+	else if(layer_type_custom==2) sprintf(buf, "dbg/layer_%02d[region]_output_data_%04d_%04d_%04d_%08d.txt", count, l.out_w, l.out_h, l.out_c, l.outputs);
+	else return;
+
+	FILE *fp = fopen(buf, "w");
+	if (l.out_w > 0) {
+		for (int x = 0; x < l.out_w; x++)
+			for (int y = 0; y < l.out_h; y++)
+			{
+				for (int c = 0; c < l.out_c; c++) {
+					fprintf(fp, "%f", l.output[y*l.out_w*l.out_c + x*l.out_c + c]);
+					if (c < (l.out_c - 1)) fprintf(fp, " ");
+				}
+				fprintf(fp, "\n");
+			}
+	}
+	else {
+		for (int c = 0; c < l.outputs; c++) fprintf(fp, "%f\n", l.output[c]);
+	}
+	fclose(fp);
+	fprintf(stderr, "done.\n");
 }

@@ -748,7 +748,7 @@ extern "C" {
     // -------------- yolov2_forward_network_quantized.c --------------------
 
     // yolov2_forward_network.c - fp32 is used for 1st and last layers during INT8-quantized inference
-    void forward_convolutional_layer_cpu(layer l, network_state state);
+    void forward_convolutional_layer_cpu(layer l, network_state state, int count);
 
     // additionally.c
     detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter);
@@ -759,7 +759,12 @@ extern "C" {
     // additionally.c
     void free_detections(detection *dets, int n);
 
+	// save weights/input/output/parameters 
 	int m_dbg;
+	void save_convolutional_weights(layer l, int ind);
+	void save_conv_layer_input_data(layer l, network_state state, int count);
+	void save_maxpool_layer_input_data(layer l, network_state state, int count);
+	void save_layer_outout_data(layer l, int count, int layer_type_custom);
 
     // -------------- gettimeofday for Windows--------------------
 

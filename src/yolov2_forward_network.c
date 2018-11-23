@@ -19,7 +19,7 @@ size_t binary_transpose_align_input(int k, int n, float *b, char **t_bit_input, 
 }
 
 // 4 layers in 1: convolution, batch-normalization, BIAS and activation
-void forward_convolutional_layer_cpu(layer l, network_state state)
+void forward_convolutional_layer_cpu(layer l, network_state state, int count)
 {
     int out_h = (l.h + 2 * l.pad - l.size) / l.stride + 1;    // output_height=input_height for stride=1 and pad=1
     int out_w = (l.w + 2 * l.pad - l.size) / l.stride + 1;    // output_width=input_width for stride=1 and pad=1
@@ -42,12 +42,16 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
         state.input = l.binary_input;
     }
 
+	// save convolution layer l input data
+	if (m_dbg) {
+		save_conv_layer_input_data(l, state, count);
+	}
+
     // l.n - number of filters on this layer
     // l.c - channels of input-array
     // l.h - height of input-array
     // l.w - width of input-array
     // l.size - width and height of filters (the same size for all filters)
-
 
     // 1. Convolution !!!
 #ifndef GEMMCONV
@@ -118,7 +122,7 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
             free(t_bit_input);
         }
         else {
-            im2col_cpu_custom(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b);    // AVX2
+            im2col_cpu_custom(state.input, l.c, l.h, l.w, l.size, l.stride, l.pad, b);  // AVX2
             int t;
             #pragma omp parallel for
             for (t = 0; t < m; ++t) {
@@ -178,9 +182,12 @@ void forward_convolutional_layer_cpu(layer l, network_state state)
 }
 
 // MAX pooling layer
-void forward_maxpool_layer_cpu(const layer l, network_state state)
+void forward_maxpool_layer_cpu(const layer l, network_state state, int count)
 {
-    //if (!state.train) 
+	if (m_dbg) {
+		save_maxpool_layer_input_data(l, state, count);
+	}
+	//if (!state.train) 
 	{
         forward_maxpool_layer_avx(state.input, l.output, l.indexes, l.size, l.w, l.h, l.out_w, l.out_h, l.c, l.pad, l.stride, l.batch);
     //  return;
@@ -311,35 +318,29 @@ void yolov2_forward_network_cpu(network net, network_state state)
         state.index = i;
         layer l = net.layers[i];
 
+		int layer_type_custom = -1;
         if (l.type == CONVOLUTIONAL) {
-            forward_convolutional_layer_cpu(l, state);
-            //printf("\n CONVOLUTIONAL \t\t l.size = %d  \n", l.size);
+            forward_convolutional_layer_cpu(l, state, i);
+			layer_type_custom = 0;
         }
         else if (l.type == MAXPOOL) {
-            forward_maxpool_layer_cpu(l, state);
-            //printf("\n MAXPOOL \t\t l.size = %d  \n", l.size);
+            forward_maxpool_layer_cpu(l, state, i);
+			layer_type_custom = 1;
         }
-        
-		/*else if (l.type == ROUTE) {
-        }
-        else if (l.type == REORG) {
-        }
-        else if (l.type == UPSAMPLE) {
-        }
-        else if (l.type == SHORTCUT) {
-        }
-        else if (l.type == YOLO) {
-        }*/
-
         else if (l.type == REGION) 
 		{
-            forward_region_layer_cpu(l, state);
+            forward_region_layer_cpu(l, state); 
+			layer_type_custom = 2;
         }
         else {
             printf("\n layer: %d \n", l.type);
         }
 
         state.input = l.output;
+
+		if (m_dbg) {
+			save_layer_outout_data(l, i, layer_type_custom);
+		}
     }
 }
 
