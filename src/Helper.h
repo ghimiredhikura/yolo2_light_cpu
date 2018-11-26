@@ -761,10 +761,14 @@ extern "C" {
 
 	// save weights/input/output/parameters 
 	int m_dbg;
+	void save_net_param(network net);
+	void save_layer_param(layer l, int count, int lt);
 	void save_convolutional_weights(layer l, int ind);
 	void save_conv_layer_input_data(layer l, network_state state, int count);
 	void save_maxpool_layer_input_data(layer l, network_state state, int count);
-	void save_layer_outout_data(layer l, int count, int layer_type_custom);
+	void save_region_layer_input_data(layer l, network_state state, int count);
+	void save_layer_output_data(layer l, int count, int layer_type_custom);
+	void save_det_data(detection *dets, int nboxes, int w, int h, int n, int nclasses, bool ini);
 
     // -------------- gettimeofday for Windows--------------------
 

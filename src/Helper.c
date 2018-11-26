@@ -1,14 +1,9 @@
-#include "additionally.h"
+#include "Helper.h"
 //#include "gpu.h"
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-
-//#define STB_IMAGE_IMPLEMENTATION
-//#include "stb_image.h"
-//#define STB_IMAGE_WRITE_IMPLEMENTATION
-//#include "stb_image_write.h"
 
 // im2col.c
 float im2col_get_pixel(float *im, int height, int width, int channels,
@@ -49,8 +44,6 @@ void im2col_cpu(float* data_im,
         }
     }
 }
-
-// -------------- my own --------------
 
 // fuse convolutional and batch_norm weights into one convolutional-layer
 void yolov2_fuse_conv_batchnorm(network net)
@@ -1058,7 +1051,7 @@ void free_layer(layer l)
 
 
 // -------------- softmax_layer.c --------------
-
+/*
 // softmax_layer.c
 softmax_layer make_softmax_layer(int batch, int inputs, int groups)
 {
@@ -1074,7 +1067,7 @@ softmax_layer make_softmax_layer(int batch, int inputs, int groups)
 
     return l;
 }
-
+*/
 // -------------- region_layer.c --------------
 
 //  region_layer.c
@@ -1862,11 +1855,6 @@ layer parse_region(list *options, size_params params)
     l.class_scale = option_find_float(options, "class_scale", 1);
     l.bias_match = option_find_int_quiet(options, "bias_match", 0);
 
-   // char *tree_file = option_find_str(options, "tree", 0);
-   // if (tree_file) l.softmax_tree = read_tree(tree_file);
-   // char *map_file = option_find_str(options, "map", 0);
-   // if (map_file) l.map = read_map(map_file);
-
     char *a = option_find_str(options, "anchors", 0);
     if (a) {
         int len = strlen(a);
@@ -1884,17 +1872,6 @@ layer parse_region(list *options, size_params params)
     return l;
 }
 
-
-// parser.c
-softmax_layer parse_softmax(list *options, size_params params)
-{
-    int groups = option_find_int_quiet(options, "groups", 1);
-    softmax_layer layer = make_softmax_layer(params.batch, params.inputs, groups);
-    layer.temperature = option_find_float_quiet(options, "temperature", 1);
-   // char *tree_file = option_find_str(options, "tree", 0);
-   // if (tree_file) layer.softmax_tree = read_tree(tree_file);
-    return layer;
-}
 
 // parser.c
 maxpool_layer parse_maxpool(list *options, size_params params)
@@ -1934,7 +1911,6 @@ void free_section(section *s)
 // parser.c
 LAYER_TYPE string_to_layer_type(char * type)
 {
-   // if (strcmp(type, "[yolo]") == 0) return YOLO;
     if (strcmp(type, "[region]") == 0) return REGION;
     if (strcmp(type, "[conv]") == 0
         || strcmp(type, "[convolutional]") == 0) return CONVOLUTIONAL;
@@ -1942,12 +1918,6 @@ LAYER_TYPE string_to_layer_type(char * type)
         || strcmp(type, "[network]") == 0) return NETWORK;
     if (strcmp(type, "[max]") == 0
         || strcmp(type, "[maxpool]") == 0) return MAXPOOL;
-    //if (strcmp(type, "[reorg]") == 0) return REORG;
-    //if (strcmp(type, "[upsample]") == 0) return UPSAMPLE;
-    //if (strcmp(type, "[shortcut]") == 0) return SHORTCUT;
-    if (strcmp(type, "[soft]") == 0
-        || strcmp(type, "[softmax]") == 0) return SOFTMAX;
-    //if (strcmp(type, "[route]") == 0) return ROUTE;
     return BLANK;
 }
 
@@ -2093,6 +2063,9 @@ network parse_network_cfg(char *filename, int batch)
     n = n->next;
     int count = 0;
     free_section(s);
+
+	if (m_dbg) save_net_param(net);
+
     fprintf(stderr, "layer     filters    size              input                output\n");
     while (n) {
         params.index = count;
@@ -2107,27 +2080,8 @@ network parse_network_cfg(char *filename, int batch)
         else if (lt == REGION) {
             l = parse_region(options, params);
         }
-        else if (lt == YOLO) {
-            //l = parse_yolo(options, params);
-        }
-        else if (lt == SOFTMAX) {
-            l = parse_softmax(options, params);
-            net.hierarchy = l.softmax_tree;
-        }
         else if (lt == MAXPOOL) {
             l = parse_maxpool(options, params);
-        }
-        else if (lt == REORG) {
-            //l = parse_reorg(options, params);
-        }
-        else if (lt == ROUTE) {
-            //l = parse_route(options, params, net);
-        }
-        else if (lt == UPSAMPLE) {
-            //l = parse_upsample(options, params, net);
-        }
-        else if (lt == SHORTCUT) {
-            //l = parse_shortcut(options, params, net);
         }
         else {
             fprintf(stderr, "Type not recognized: %s\n", s->type);
@@ -2140,20 +2094,21 @@ network parse_network_cfg(char *filename, int batch)
         if (l.workspace_size > workspace_size) workspace_size = l.workspace_size;
         free_section(s);
         n = n->next;
-        ++count;
         if (n) {
             params.h = l.out_h;
             params.w = l.out_w;
             params.c = l.out_c;
             params.inputs = l.outputs;
         }
+		if (m_dbg) save_layer_param(l, count+1, lt);
+
+		++count;
     }
 
     free_list(sections);
     net.outputs = get_network_output_size(net);
     net.output = get_network_output(net);
     if (workspace_size) {
-        //printf("%ld\n", workspace_size);
         net.workspace = calloc(1, workspace_size);
     }
     return net;
@@ -2348,6 +2303,74 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
 
 
 // save weights/input/output/parameters
+
+void save_net_param(network net)
+{
+	char buf[256];
+	fprintf(stderr, "network init.: writing parameters...");
+	sprintf(buf, "dbg/network_parameters.txt");
+	FILE *fp = fopen(buf, "w");
+	fprintf(fp, "m_net.inputs: %d\n", net.inputs);
+	fprintf(fp, "m_net.h: %d\n", net.h);
+	fprintf(fp, "m_net.w: %d\n", net.w);
+	fprintf(fp, "m_net.c: %d\n", net.c);
+	fprintf(fp, "m_net.max_crop: %d\n", net.max_crop);
+	fprintf(fp, "m_net.min_crop: %d\n", net.min_crop);
+	fprintf(fp, "m_net.angle: %f\n", net.angle);
+	fprintf(fp, "m_net.aspect: %f\n", net.aspect);
+	fprintf(fp, "m_net.saturation: %f\n", net.saturation);
+	fprintf(fp, "m_net.exposure: %f\n", net.exposure);
+	fprintf(fp, "m_net.hue: %f\n", net.hue);
+	fprintf(fp, "m_net.learning_rate: %f\n", net.learning_rate);
+	fprintf(fp, "m_net.batch: %d\n", net.batch);
+	fprintf(fp, "m_net.max_batches: %d\n", net.max_batches);
+	fprintf(fp, "m_net.step: %d\n", net.step);
+	fprintf(fp, "m_net.scale: %f\n", net.scale);
+	fprintf(fp, "m_net.num_steps: %d\n", net.num_steps);
+	for (int i = 0; i < net.num_steps; i++) {
+		fprintf(fp, "m_net.step[%d]      : %d\n", i, net.steps[i]);
+		fprintf(fp, "m_net.scale[%d]     : %f\n", i, net.scales[i]);
+	}
+	fprintf(fp, "m_net.time_steps: %d\n", net.time_steps);
+	fprintf(fp, "m_net.policy: %d\n", net.policy);
+	fprintf(fp, "m_net.gamma: %f\n", net.gamma);
+	fprintf(fp, "m_net.power: %f\n", net.power);
+	fprintf(fp, "m_net.decay: %f\n", net.decay);
+	fprintf(fp, "m_net.adam: %d\n", net.adam);
+	fprintf(fp, "m_net.B1: %f\n", net.B1);
+	fprintf(fp, "m_net.B2: %f\n", net.B2);
+	fprintf(fp, "m_net.eps: %f\n", net.eps);
+	fprintf(fp, "m_net.burn_in: %d\n", net.burn_in);
+	fprintf(fp, "m_net.momentum: %f\n", net.momentum);
+	fprintf(fp, "m_net.subdivisions : %d\n", net.subdivisions);
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+void save_layer_param(layer l, int count, int lt)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d init.: writing parameters...", count);
+	sprintf(buf, "dbg/layer_parameters_%02d_%02d.txt", count, lt);
+	FILE *fp = fopen(buf, "w");
+	fprintf(fp, "layer #%d (type: %d)\n", count, lt);
+	fprintf(fp, "l.size: %d\n", l.size);
+	fprintf(fp, "l.stride: %d\n", l.stride);
+	fprintf(fp, "l.pad: %d\n", l.pad);
+	fprintf(fp, "l.n (# of filters): %d\n", l.n);
+	fprintf(fp, "l.batch_normalize: %d\n", l.batch_normalize);
+	fprintf(fp, "l.activation(type): %d\n", l.activation);
+	fprintf(fp, "l.out_h: %d\n", l.out_h);
+	fprintf(fp, "l.out_w: %d\n", l.out_w);
+	fprintf(fp, "l.out_c: %d\n", l.out_c);
+	fprintf(fp, "l.outputs: %d\n", l.outputs);
+	fprintf(fp, "l.xnor: %d\n", l.xnor);
+	fprintf(fp, "l.bin_output: %d\n", l.use_bin_output);
+
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
 void save_convolutional_weights(layer l, int ind)
 {
 	char fn_conv[256], fn_norm[256];
@@ -2420,7 +2443,24 @@ void save_maxpool_layer_input_data(layer l, network_state state, int count)
 	fprintf(stderr, "done.\n");
 }
 
-void save_layer_outout_data(layer l, int count, int layer_type_custom)
+void save_region_layer_input_data(layer l, network_state state, int count)
+{
+	char buf[256];
+	fprintf(stderr, "layer %d[region]: writing layer input data...", count);
+	sprintf(buf, "dbg/layer_%02d[region]_input_data_%04d_%04d_%04d_(%d+%d+1).txt", count, l.w, l.h, l.n, l.classes, l.coords);
+	FILE *fp = fopen(buf, "w");
+
+	int m = l.n*l.h*l.w*(l.classes+l.coords+1)*l.batch;
+
+	for (int i = 0; i < m; i++) {
+		fprintf(fp, "%f ", state.input[i]);
+	}
+
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+}
+
+void save_layer_output_data(layer l, int count, int layer_type_custom)
 {
 	char buf[256];
 	
@@ -2447,4 +2487,44 @@ void save_layer_outout_data(layer l, int count, int layer_type_custom)
 	}
 	fclose(fp);
 	fprintf(stderr, "done.\n");
+}
+
+void save_det_data(detection *dets, int w, int h, int n, int nboxes, int nclasses, bool ini)
+{
+	/*
+	char buf[256];
+	
+	if (ini) {
+		fprintf(stderr, "detection run: writing classification/regression data...");
+		sprintf(buf, "dbg/det_init_%04d_%04d_%02d_%02d.txt", w, h, n, c);
+	}
+	else {
+		fprintf(stderr, "detection final: writing classification/regression data...");
+		sprintf(buf, "dbg/det_final_%04d_%04d_%02d_%02d.txt", w, h, n, c);
+	}
+	FILE *fp = fopen(buf, "w");
+	
+	for (int x = 0; x < w; x++)
+		for (int y = 0; y < h; y++)
+			for (int k = 0; k < n; k++)
+			{
+				fprintf(fp, "%f %f %f %f ", boxes[y*w*n + x*n + k].x, boxes[y*w*n + x*n + k].y, boxes[y*w*n + x*n + k].h, boxes[y*w*n + x*n + k].w);
+				for (int l = 0; l < c; l++) {
+					fprintf(fp, "%.0f", probs[y*w*n + x*n + k][l] * 100);
+					if (l < (c - 1)) fprintf(fp, " ");
+				}
+				fprintf(fp, "\n");
+			}
+	fclose(fp);
+	fprintf(stderr, "done.\n");
+
+	/*
+	    for (j = 0; j < l.w*l.h*l.n; ++j) {
+        dets[j].classes = l.classes;
+        dets[j].bbox = boxes[j];
+        dets[j].objectness = 1;
+        for (i = 0; i < l.classes; ++i) {
+            dets[j].prob[i] = probs[j][i];
+        }
+    }*/
 }

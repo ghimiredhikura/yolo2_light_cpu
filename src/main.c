@@ -3,7 +3,7 @@
 
 #include "box.h"
 
-#include "additionally.h"
+#include "Helper.h"
 
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
@@ -185,9 +185,12 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
         
 		float hier_thresh = 0.5;
         int ext_output = 1, letterbox = 0, nboxes = 0;
-        detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
+        
+		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
         if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-        draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
+        if(m_dbg) save_det_data(dets, nboxes, l.w, l.h, l.n, l.classes, 0);
+
+		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
 
         if (!dont_show) {
             show_image(im, "predictions");    // image.c
@@ -252,7 +255,7 @@ int main(int argc, char **argv)
         strip(argv[i]);
     }
 
-	m_dbg = 1;
+	m_dbg = 0;
 
 	if(m_dbg) {
 		_mkdir("dbg");

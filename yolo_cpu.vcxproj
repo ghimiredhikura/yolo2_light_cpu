@@ -69,7 +69,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>bin\</OutDir>
+    <OutDir>Bin\</OutDir>
     <IntDir>$(Platform)\cpu_$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -142,14 +142,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\additionally.c" />
-    <ClCompile Include="src\box.c" />
+    <ClCompile Include="src\Helper.c" />
+    <ClCompile Include="src\Box.c" />
     <ClCompile Include="src\main.c" />
-    <ClCompile Include="src\yolov2_forward_network.c" />
+    <ClCompile Include="src\Network.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\additionally.h" />
-    <ClInclude Include="src\box.h" />
+    <ClInclude Include="src\Helper.h" />
+    <ClInclude Include="src\Box.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

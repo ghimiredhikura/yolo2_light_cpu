@@ -1,7 +1,7 @@
-#include "additionally.h"    // some definitions from: im2col.h, blas.h, list.h, utils.h, activations.h, tree.h, layer.h, network.h
+#include "Helper.h"    // some definitions from: im2col.h, blas.h, list.h, utils.h, activations.h, tree.h, layer.h, network.h
 // softmax_layer.h, reorg_layer.h, route_layer.h, region_layer.h, maxpool_layer.h, convolutional_layer.h
 
-#define GEMMCONV
+//#define GEMMCONV
 
 // binary transpose
 size_t binary_transpose_align_input(int k, int n, float *b, char **t_bit_input, size_t ldb_align, int bit_align)
@@ -44,7 +44,7 @@ void forward_convolutional_layer_cpu(layer l, network_state state, int count)
 
 	// save convolution layer l input data
 	if (m_dbg) {
-		save_conv_layer_input_data(l, state, count);
+		save_conv_layer_input_data(l, state, count+1);
 	}
 
     // l.n - number of filters on this layer
@@ -70,32 +70,45 @@ void forward_convolutional_layer_cpu(layer l, network_state state, int count)
                     int const output_index = fil*l.w*l.h + y*l.w + x;
                     int const weights_pre_index = fil*l.c*l.size*l.size + chan*l.size*l.size;
                     int const input_pre_index = chan*l.w*l.h;
-                    float sum = 0;
+					
+					int count = 0;
+					int count_neg = 0;
+					float sum = 0;
 
-                    // filter - y
-                    for (f_y = 0; f_y < l.size; ++f_y)
-                    {
-                        int input_y = y + f_y - l.pad;
-                        // filter - x
-                        for (f_x = 0; f_x < l.size; ++f_x)
-                        {
-                            int input_x = x + f_x - l.pad;
-                            if (input_y < 0 || input_x < 0 || input_y >= l.h || input_x >= l.w) continue;
+					// filter - y
+					for (f_y = 0; f_y < l.size; ++f_y)
+					{
+						int input_y = y + f_y - l.pad;
+						// filter - x
+						for (f_x = 0; f_x < l.size; ++f_x)
+						{
+							int input_x = x + f_x - l.pad;
+							if (input_y < 0 || input_x < 0 || input_y >= l.h || input_x >= l.w) continue;
 
-                            int input_index = input_pre_index + input_y*l.w + input_x;
-                            int weights_index = weights_pre_index + f_y*l.size + f_x;
+							int input_index = input_pre_index + input_y*l.w + input_x;
+							int weights_index = weights_pre_index + f_y*l.size + f_x;
 
-                            sum += state.input[input_index] * l.weights[weights_index];
-                        }
-                    }
-                    // l.output[filters][width][height] +=
-                    //        state.input[channels][width][height] *
-                    //        l.weights[filters][channels][filter_width][filter_height];
-                    l.output[output_index] += sum;
-                }
+							if (l.xnor) {
+								int bin_input_val = (state.input[input_index] > 0) ? 1 : 0;
+								int bin_weight_val = (l.weights[weights_index] > 0) ? 1 : 0;
+								int out_xnor = !(bin_input_val ^ bin_weight_val);
+
+								if (out_xnor) count++;
+								else count_neg++;
+							}
+							else {
+								sum += state.input[input_index] * l.weights[weights_index];
+							}
+						}
+					}
+					if (l.xnor) 
+						l.output[output_index] += (count - count_neg) * l.mean_arr[fil];
+					else 
+						l.output[output_index] += sum;
+                }		
     }
-#else
 
+#else
     int m = l.n;
     int k = l.size*l.size*l.c;
     int n = out_h*out_w;
@@ -132,12 +145,11 @@ void forward_convolutional_layer_cpu(layer l, network_state state, int count)
         c += n*m;
         state.input += l.c*l.h*l.w;
     }
-
 #endif
 
     int const out_size = out_h*out_w;
 
-    // 2. Batch normalization
+    // 2. Batch normalization, already fused with convolution operation, will not be used. 
     if (l.batch_normalize) {
         int b;
         for (b = 0; b < l.batch; b++) {
@@ -185,54 +197,13 @@ void forward_convolutional_layer_cpu(layer l, network_state state, int count)
 void forward_maxpool_layer_cpu(const layer l, network_state state, int count)
 {
 	if (m_dbg) {
-		save_maxpool_layer_input_data(l, state, count);
+		save_maxpool_layer_input_data(l, state, count+1);
 	}
 	//if (!state.train) 
 	{
         forward_maxpool_layer_avx(state.input, l.output, l.indexes, l.size, l.w, l.h, l.out_w, l.out_h, l.c, l.pad, l.stride, l.batch);
     //  return;
     }
-
-	/*
-    int b, i, j, k, m, n;
-    const int w_offset = -l.pad;
-    const int h_offset = -l.pad;
-
-    const int h = l.out_h;
-    const int w = l.out_w;
-    const int c = l.c;
-
-    // batch index
-    for (b = 0; b < l.batch; ++b) {
-        // channel index
-        for (k = 0; k < c; ++k) {
-            // y - input
-            for (i = 0; i < h; ++i) {
-                // x - input
-                for (j = 0; j < w; ++j) {
-                    int out_index = j + w*(i + h*(k + c*b));
-                    float max = -FLT_MAX;
-                    int max_i = -1;
-                    // pooling x-index
-                    for (n = 0; n < l.size; ++n) {
-                        // pooling y-index
-                        for (m = 0; m < l.size; ++m) {
-                            int cur_h = h_offset + i*l.stride + n;
-                            int cur_w = w_offset + j*l.stride + m;
-                            int index = cur_w + l.w*(cur_h + l.h*(k + b*l.c));
-                            int valid = (cur_h >= 0 && cur_h < l.h && cur_w >= 0 && cur_w < l.w);
-                            float val = (valid != 0) ? state.input[index] : -FLT_MAX;
-                            max_i = (val > max) ? index : max_i;    // get max index
-                            max = (val > max) ? val : max;            // get max value
-                        }
-                    }
-                    l.output[out_index] = max;        // store max value
-                    l.indexes[out_index] = max_i;    // store max index
-                }
-            }
-        }
-    }
-	*/
 }
 
 static void softmax_cpu(float *input, int n, float temp, float *output)
@@ -254,11 +225,15 @@ static void softmax_cpu(float *input, int n, float temp, float *output)
 }
 
 // Region layer - just change places of array items, then do logistic_activate and softmax
-void forward_region_layer_cpu(const layer l, network_state state)
+void forward_region_layer_cpu(const layer l, network_state state, int count)
 {
     int i, b;
     int size = l.coords + l.classes + 1;    // 4 Coords(x,y,w,h) + Classes + 1 Probability-t0
     memcpy(l.output, state.input, l.outputs*l.batch * sizeof(float));
+
+	if (m_dbg) {
+		save_region_layer_input_data(l, state, count + 1);
+	}
 
     //flatten(l.output, l.w*l.h, size*l.n, l.batch, 1);
     // convert many channels to the one channel (depth=1)
@@ -329,7 +304,7 @@ void yolov2_forward_network_cpu(network net, network_state state)
         }
         else if (l.type == REGION) 
 		{
-            forward_region_layer_cpu(l, state); 
+            forward_region_layer_cpu(l, state, i); 
 			layer_type_custom = 2;
         }
         else {
@@ -339,7 +314,7 @@ void yolov2_forward_network_cpu(network net, network_state state)
         state.input = l.output;
 
 		if (m_dbg) {
-			save_layer_outout_data(l, i, layer_type_custom);
+			save_layer_output_data(l, i+1, layer_type_custom);
 		}
     }
 }
