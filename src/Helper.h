@@ -1,6 +1,6 @@
 #pragma once
-#ifndef ADDITIONALLY_H
-#define ADDITIONALLY_H
+#ifndef HELPER_H
+#define HELPER_H
 
 #include "box.h"
 
@@ -14,20 +14,13 @@
 #include <limits.h>
 #include <stdint.h>
 
-#ifdef OPENCV
 #include <opencv2/core/fast_math.hpp>
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/imgproc/imgproc_c.h"
 #include "opencv2/core/types_c.h"
 #include "opencv2/core/version.hpp"
-
-// for OpenCV 3.x only
-#ifndef CV_VERSION_EPOCH
 #include "opencv2/imgcodecs/imgcodecs_c.h"
-#include "opencv2/videoio/videoio_c.h"
-#endif
 
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -706,13 +699,11 @@ extern "C" {
     // image.c
     //image (char *filename, int channels);
 
-#ifdef OPENCV
     // image.c
     image ipl_to_image(IplImage* src);
 
     // image.c
     void show_image_cv_ipl(IplImage *disp, const char *name);
-#endif
 
     // image.c
     image load_image_cv(char *filename, int channels);
@@ -738,25 +729,19 @@ extern "C" {
 
     // -------------- yolov2_forward_network.c --------------------
 
-
-    // detect on CPU: yolov2_forward_network.c
+    // detect on CPU: yolov2_forward_network
     float *network_predict_cpu(network net, float *input);
 
     // fuse convolutional and batch_norm weights into one convolutional-layer
     void yolov2_fuse_conv_batchnorm(network net);
 
-    // -------------- yolov2_forward_network_quantized.c --------------------
-
     // yolov2_forward_network.c - fp32 is used for 1st and last layers during INT8-quantized inference
     void forward_convolutional_layer_cpu(layer l, network_state state, int count);
 
-    // additionally.c
-    detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter);
+    detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int relative, int *num, int letter);
 
-    // additionally.c
-    int entry_index(layer l, int batch, int location, int entry);
+    //int entry_index(layer l, int batch, int location, int entry);
 
-    // additionally.c
     void free_detections(detection *dets, int n);
 
 	// save weights/input/output/parameters 
@@ -768,19 +753,14 @@ extern "C" {
 	void save_maxpool_layer_input_data(layer l, network_state state, int count);
 	void save_region_layer_input_data(layer l, network_state state, int count);
 	void save_layer_output_data(layer l, int count, int layer_type_custom);
-	void save_det_data(detection *dets, int nboxes, int w, int h, int n, int nclasses, bool ini);
+	void save_det_data_initial(float **probs, box *boxes, int w, int h, int n, int c);
+	void save_det_data_final(detection *dets, int nboxes, int w, int h, int n, int c);
 
     // -------------- gettimeofday for Windows--------------------
 
-#if defined(_MSC_VER)
 #include <time.h>
-#include <windows.h> //I've ommited this line.
-#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
+#include <windows.h>
 #define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
-#else
-#define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
-#include <sys/time.h>
-#endif
 
     struct timezone
     {
@@ -789,10 +769,9 @@ extern "C" {
     };
 
     int gettimeofday(struct timeval *tv, struct timezone *tz);
-#endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif    // ADDITIONALLY_H
+#endif    // HELPER_H

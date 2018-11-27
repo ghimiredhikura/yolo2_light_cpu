@@ -1,1 +1,0 @@
-darknet.exe detector train tiny-yolo-voc_xnor/voc.data tiny-yolo-voc_xnor/tiny-yolo-obj_xnor_new.cfg tiny-yolo-voc_xnor/yolov2-tiny.conv.13 

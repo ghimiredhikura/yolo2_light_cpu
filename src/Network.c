@@ -353,7 +353,7 @@ box get_region_box_cpu(float *x, float *biases, int n, int index, int i, int j, 
 }
 
 // get prediction boxes
-void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map)
+void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness)
 {
     int i;
     float *const predictions = l.output;
@@ -363,12 +363,13 @@ void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, bo
         int j, n;
         int row = i / l.w;
         int col = i % l.w;
+
         // anchor index
         for (n = 0; n < l.n; ++n) {
             int index = i*l.n + n;    // index for each grid-cell & anchor
             int p_index = index * (l.classes + 5) + 4;
-            float scale = predictions[p_index];                // scale = t0 = Probability * IoU(box, object)
-            if (l.classfix == -1 && scale < .5) scale = 0;    // if(t0 < 0.5) t0 = 0;
+            float scale = predictions[p_index];              // scale = t0 = Probability * IoU(box, object)
+            if (l.classfix == -1 && scale < .5) scale = 0;   // if(t0 < 0.5) t0 = 0;
             int box_index = index * (l.classes + 5);
             boxes[index] = get_region_box_cpu(predictions, l.biases, n, box_index, col, row, l.w, l.h);
             boxes[index].x *= w;
@@ -377,17 +378,15 @@ void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, bo
             boxes[index].h *= h;
 
             int class_index = index * (l.classes + 5) + 5;
-			
-			{
-                // Yolo v2
-                for (j = 0; j < l.classes; ++j) {
-                    float prob = scale*predictions[class_index + j];    // prob = IoU(box, object) = t0 * class-probability
-                    probs[index][j] = (prob > thresh) ? prob : 0;        // if (IoU < threshold) IoU = 0;
-                }
+            for (j = 0; j < l.classes; ++j) {
+                float prob = scale*predictions[class_index + j];    // prob = IoU(box, object) = t0 * class-probability
+                probs[index][j] = (prob > thresh) ? prob : 0;        // if (IoU < threshold) IoU = 0;
             }
-            if (only_objectness) {
+			if (only_objectness) {
                 probs[index][0] = scale;
             }
         }
     }
+
+	if (m_dbg) save_det_data_initial(probs, boxes, l.w, l.h, l.n, l.classes);
 }

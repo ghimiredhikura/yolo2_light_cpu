@@ -1,5 +1,4 @@
 #include "Helper.h"
-//#include "gpu.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -602,8 +601,6 @@ void fill_cpu(int N, float ALPHA, float *X, int INCX)
 }
 
 // -------------- utils.c --------------
-
-
 // utils.c
 void error(const char *s)
 {
@@ -1049,27 +1046,6 @@ void free_layer(layer l)
     if (l.binary_input)       free(l.binary_input);
 }
 
-
-// -------------- softmax_layer.c --------------
-/*
-// softmax_layer.c
-softmax_layer make_softmax_layer(int batch, int inputs, int groups)
-{
-    assert(inputs%groups == 0);
-    fprintf(stderr, "softmax                                        %4d\n", inputs);
-    softmax_layer l = { 0 };
-    l.type = SOFTMAX;
-    l.batch = batch;
-    l.groups = groups;
-    l.inputs = inputs;
-    l.outputs = inputs;
-    l.output = calloc(inputs*batch, sizeof(float));
-
-    return l;
-}
-*/
-// -------------- region_layer.c --------------
-
 //  region_layer.c
 region_layer make_region_layer(int batch, int w, int h, int n, int classes, int coords)
 {
@@ -1400,9 +1376,7 @@ image resize_image(image im, int w, int h)
 // image.c
 image load_image(char *filename, int w, int h, int c)
 {
-#ifdef OPENCV
     image out = load_image_cv(filename, c);
-#endif
 
     if ((h && w) && (h != out.h || w != out.w)) {
         image resized = resize_image(out, w, h);
@@ -1411,8 +1385,6 @@ image load_image(char *filename, int w, int h, int c)
     }
     return out;
 }
-
-#ifdef OPENCV
 
 // image.c
 image ipl_to_image(IplImage* src)
@@ -1461,7 +1433,6 @@ image load_image_cv(char *filename, int channels)
     rgbgr_image(out);
     return out;
 }
-#endif    // OPENCV
 
 // image.c
 image copy_image(image p)
@@ -1482,7 +1453,6 @@ void constrain_image(image im)
     }
 }
 
-#ifdef OPENCV
 // image.c
 void show_image_cv(image p, const char *name)
 {
@@ -1504,6 +1474,7 @@ void show_image_cv(image p, const char *name)
         }
     }
     free_image(copy);
+
     cvShowImage(buff, disp);
 
     cvReleaseImage(&disp);
@@ -1518,8 +1489,6 @@ void show_image_cv_ipl(IplImage *disp, const char *name)
     cvNamedWindow(buff, CV_WINDOW_NORMAL);
     cvShowImage(buff, disp);
 }
-#endif
-
 
 // image.c
 void show_image(image p, const char *name)
@@ -2154,21 +2123,23 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 #endif    // _MSC_VER
 
 
+/*
 int entry_index(layer l, int batch, int location, int entry)
 {
     int n = location / (l.w*l.h);
     int loc = location % (l.w*l.h);
     return batch*l.outputs + n*l.w*l.h*(4 + l.classes + 1) + entry*l.w*l.h + loc;
 }
+*/
 
 int num_detections(network *net, float thresh)
 {
     int i;
     int s = 0;
-    for (i = 0; i < net->n; ++i) {
+    for (i = 0; i < net->n; ++i) 
+	{
         layer l = net->layers[i];
-        
-		if (l.type == DETECTION || l.type == REGION) 
+		if (l.type == REGION || l.type == DETECTION)
 		{
             s += l.w*l.h*l.n;
         }
@@ -2178,17 +2149,25 @@ int num_detections(network *net, float thresh)
 
 detection *make_network_boxes(network *net, float thresh, int *num)
 {
+	printf("check1.1\n");
+
     layer l = net->layers[net->n - 1];
     int i;
     int nboxes = num_detections(net, thresh);
-    if (num) *num = nboxes;
+    
+	if (num) *num = nboxes;
+	
+	printf("check1.2 - %d\n", nboxes);
+
     detection *dets = calloc(nboxes, sizeof(detection));
-    for (i = 0; i < nboxes; ++i) {
+    
+	for (i = 0; i < nboxes; ++i) {
         dets[i].prob = calloc(l.classes, sizeof(float));
         if (l.coords > 4) {
             dets[i].mask = calloc(l.coords - 4, sizeof(float));
         }
-    }
+    }	
+
     return dets;
 }
 
@@ -2255,17 +2234,17 @@ void correct_yolo_boxes(detection *dets, int n, int w, int h, int netw, int neth
     }
 }
 
-// get prediction boxes: yolov2_forward_network.c
-void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map);
+// get prediction boxes:
+void get_region_boxes_cpu(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness);
 
 
-void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, float thresh, int *map, float hier, int relative, detection *dets, int letter)
+void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, float thresh, float hier, int relative, detection *dets, int letter)
 {
     box *boxes = calloc(l.w*l.h*l.n, sizeof(box));
     float **probs = calloc(l.w*l.h*l.n, sizeof(float *));
     int i, j;
     for (j = 0; j < l.w*l.h*l.n; ++j) probs[j] = calloc(l.classes, sizeof(float *));
-    get_region_boxes_cpu(l, 1, 1, thresh, probs, boxes, 0, map);
+    get_region_boxes_cpu(l, 1, 1, thresh, probs, boxes, 0);
     for (j = 0; j < l.w*l.h*l.n; ++j) {
         dets[j].classes = l.classes;
         dets[j].bbox = boxes[j];
@@ -2281,29 +2260,29 @@ void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, f
     correct_yolo_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative, letter);
 }
 
-void fill_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, detection *dets, int letter)
+void fill_network_boxes(network *net, int w, int h, float thresh, float hier, int relative, detection *dets, int letter)
 {
     int j;
     for (j = 0; j < net->n; ++j) {
         layer l = net->layers[j];
         
-		if (l.type == REGION) {
-            custom_get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets, letter);
-            dets += l.w*l.h*l.n;
+		if (l.type == REGION || l.type == DETECTION) 
+		{
+            custom_get_region_detections(l, w, h, net->w, net->h, thresh, hier, relative, dets, letter);
+            dets += l.w*l.h*l.n;			
         }
     }
 }
 
-detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter)
+detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int relative, int *num, int letter)
 {
     detection *dets = make_network_boxes(net, thresh, num);
-    fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
+	
+    fill_network_boxes(net, w, h, thresh, hier, relative, dets, letter);
     return dets;
 }
 
-
 // save weights/input/output/parameters
-
 void save_net_param(network net)
 {
 	char buf[256];
@@ -2489,19 +2468,13 @@ void save_layer_output_data(layer l, int count, int layer_type_custom)
 	fprintf(stderr, "done.\n");
 }
 
-void save_det_data(detection *dets, int w, int h, int n, int nboxes, int nclasses, bool ini)
+void save_det_data_initial(float **probs, box *boxes, int w, int h, int n, int c)
 {
-	/*
 	char buf[256];
 	
-	if (ini) {
-		fprintf(stderr, "detection run: writing classification/regression data...");
-		sprintf(buf, "dbg/det_init_%04d_%04d_%02d_%02d.txt", w, h, n, c);
-	}
-	else {
-		fprintf(stderr, "detection final: writing classification/regression data...");
-		sprintf(buf, "dbg/det_final_%04d_%04d_%02d_%02d.txt", w, h, n, c);
-	}
+	fprintf(stderr, "detection run: writing classification/regression data...");
+	sprintf(buf, "dbg/det_initial_%04d_%04d_%02d_%02d.txt", w, h, n, c);
+
 	FILE *fp = fopen(buf, "w");
 	
 	for (int x = 0; x < w; x++)
@@ -2517,14 +2490,28 @@ void save_det_data(detection *dets, int w, int h, int n, int nboxes, int nclasse
 			}
 	fclose(fp);
 	fprintf(stderr, "done.\n");
+}
 
-	/*
-	    for (j = 0; j < l.w*l.h*l.n; ++j) {
-        dets[j].classes = l.classes;
-        dets[j].bbox = boxes[j];
-        dets[j].objectness = 1;
-        for (i = 0; i < l.classes; ++i) {
-            dets[j].prob[i] = probs[j][i];
-        }
-    }*/
+void save_det_data_final(detection *dets, int nboxes, int w, int h, int n, int c)
+{
+	char buf[256];
+
+	fprintf(stderr, "detection run: writing classification/regression data...");
+	sprintf(buf, "dbg/det_final_%04d_%04d_%02d_%02d.txt", w, h, n, c);
+
+	FILE *fp = fopen(buf, "w");
+
+	for (int x = 0; x < w; x++)
+		for (int y = 0; y < h; y++)
+			for (int k = 0; k < n; k++)
+			{
+				fprintf(fp, "%f %f %f %f ", dets[y*w*n + x*n + k].bbox.x, dets[y*w*n + x*n + k].bbox.y, dets[y*w*n + x*n + k].bbox.h, dets[y*w*n + x*n + k].bbox.w);
+				for (int l = 0; l < c; l++) {
+					fprintf(fp, "%.0f", dets[y*w*n + x*n + k].prob[l] * 100);
+					if (l < (c - 1)) fprintf(fp, " ");
+				}
+				fprintf(fp, "\n");
+			}
+	fclose(fp);
+	fprintf(stderr, "done.\n");
 }

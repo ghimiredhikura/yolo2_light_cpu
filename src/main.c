@@ -5,28 +5,17 @@
 
 #include "Helper.h"
 
-#ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/core/core_c.h"
 #include "opencv2/core/version.hpp"
 
-#ifndef CV_VERSION_EPOCH
-#include "opencv2/videoio/videoio_c.h"
 #define OPENCV_VERSION CVAUX_STR(CV_VERSION_MAJOR)""CVAUX_STR(CV_VERSION_MINOR)""CVAUX_STR(CV_VERSION_REVISION)
 #pragma comment(lib, "opencv_world" OPENCV_VERSION ".lib")
-#else
-#define OPENCV_VERSION CVAUX_STR(CV_VERSION_EPOCH)""CVAUX_STR(CV_VERSION_MAJOR)""CVAUX_STR(CV_VERSION_MINOR)
-#pragma comment(lib, "opencv_core" OPENCV_VERSION ".lib")
-#pragma comment(lib, "opencv_imgproc" OPENCV_VERSION ".lib")
-#pragma comment(lib, "opencv_highgui" OPENCV_VERSION ".lib")
-#endif
-
-#endif
 
 typedef struct detection_with_class {
     detection det;
     // The most probable class id: the best class index in this->prob.
-    // Is filled temporary when processing results, otherwise not initialized
+    // Is filled temporary when processing results, otherwise not initialized.
     int best_class;
 } detection_with_class;
 
@@ -57,29 +46,12 @@ detection_with_class* get_actual_detections(detection *dets, int dets_num, float
     return result_arr;
 }
 
-// compare to sort detection** by bbox.x
-int compare_by_lefts(const void *a_ptr, const void *b_ptr) {
-    const detection_with_class* a = (detection_with_class*)a_ptr;
-    const detection_with_class* b = (detection_with_class*)b_ptr;
-    const float delta = (a->det.bbox.x - a->det.bbox.w / 2) - (b->det.bbox.x - b->det.bbox.w / 2);
-    return delta < 0 ? -1 : delta > 0 ? 1 : 0;
-}
-
-// compare to sort detection** by best_class probability
-int compare_by_probs(const void *a_ptr, const void *b_ptr) {
-    const detection_with_class* a = (detection_with_class*)a_ptr;
-    const detection_with_class* b = (detection_with_class*)b_ptr;
-    float delta = a->det.prob[a->best_class] - b->det.prob[b->best_class];
-    return delta < 0 ? -1 : delta > 0 ? 1 : 0;
-}
-
-void draw_detections_v3(image im, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output)
+void draw_detections(image im, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output)
 {
     int selected_detections_num;
     detection_with_class* selected_detections = get_actual_detections(dets, num, thresh, &selected_detections_num);
 
     // text output
-    qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_lefts);
     int i;
     for (i = 0; i < selected_detections_num; ++i) {
         const int best_class = selected_detections[i].best_class;
@@ -99,9 +71,12 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
         }
     }
 
+	if (m_dbg) {
+		FILE *fp = fopen("dbg/output.txt", "w");
+		fclose(fp);
+	}
 
     // image output
-    qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_probs);
     for (i = 0; i < selected_detections_num; ++i) {
         int width = im.h * .006;
         if (width < 1)
@@ -115,7 +90,6 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
         float rgb[3];
 
         //width = prob*20+2;
-
         rgb[0] = red;
         rgb[1] = green;
         rgb[2] = blue;
@@ -132,22 +106,33 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
         if (top < 0) top = 0;
         if (bot > im.h - 1) bot = im.h - 1;
 
+		if (m_dbg) {
+			float prob = 0.f;
+			for (int j = 0; j < classes; ++j) {
+				if (selected_detections[i].det.prob[j] > thresh && j == selected_detections[i].best_class) {
+					prob = selected_detections[i].det.prob[j] * 100;
+				}
+			}
+			FILE *fp = fopen("dbg/output.txt", "a+");
+			fprintf(fp, "%d %.2f %d %d %d %d\n", selected_detections[i].best_class, prob, left, top, right, bot);
+			fclose(fp);
+		}
+
         draw_box_width(im, left, top, right, bot, width, red, green, blue);
+
     }
     free(selected_detections);
 }
 
 // --------------- Detect on the Image ---------------
 // Detect on Image: this function uses other functions not from this file
-void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh, int dont_show)
+void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *filename, float thresh)
 {
     image **alphabet = NULL;
-    network net = parse_network_cfg(cfgfile, 1);  // parser.c
+    network net = parse_network_cfg(cfgfile, 1);  
     
-	if (weightfile) 
-	{
-        load_weights_upto_cpu(&net, weightfile, net.n);    // parser.c
-    }
+	if (weightfile) load_weights_upto_cpu(&net, weightfile, net.n);  
+	else return;
 
     srand(2222222);
     yolov2_fuse_conv_batchnorm(net);
@@ -159,69 +144,55 @@ void test_detector_cpu(char **names, char *cfgfile, char *weightfile, char *file
     char *input = buff;
     int j;
     float nms = .4;
-    while (1) 
-	{
-        if (filename) {
-            strncpy(input, filename, 256);
-        }
-        else {
-            printf("Enter Image Path: ");
-            fflush(stdout);
-            input = fgets(input, 256, stdin);
-            if (!input) return;
-            strtok(input, "\n");
-        }
 
-        image im = load_image(input, 0, 0, 3);            // image.c
-        image sized = resize_image(im, net.w, net.h);    // image.c
-        layer l = net.layers[net.n - 1];
-
-        float *X = sized.data;
-        time = clock();
-        
-        network_predict_cpu(net, X);
-
-		printf("%s: Predicted in %f seconds.\n", input, (float)(clock() - time) / CLOCKS_PER_SEC); //sec(clock() - time));
-        
-		float hier_thresh = 0.5;
-        int ext_output = 1, letterbox = 0, nboxes = 0;
-        
-		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
-        if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-        if(m_dbg) save_det_data(dets, nboxes, l.w, l.h, l.n, l.classes, 0);
-
-		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
-
-        if (!dont_show) {
-            show_image(im, "predictions");    // image.c
-        }
-
-        free_image(im);                    // image.c
-        free_image(sized);                // image.c
-
-#ifdef OPENCV
-        cvWaitKey(0);
-        cvDestroyAllWindows();
-#endif
-        if (filename) break;
+	if (filename) strncpy(input, filename, 256);
+    else {
+		printf("Image path is not provided!"); 
+		return;
     }
+
+    image im = load_image(input, 0, 0, 3);
+    image sized = resize_image(im, net.w, net.h);
+    layer l = net.layers[net.n - 1];
+
+    float *X = sized.data;
+    time = clock();
+        
+    network_predict_cpu(net, X);
+
+	printf("%s: Predicted in %f seconds.\n", input, (float)(clock() - time) / CLOCKS_PER_SEC); //sec(clock() - time));
+        
+	float hier_thresh = 0.5;
+    int ext_output = 1, letterbox = 0, nboxes = 0;
+        
+	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 1, &nboxes, letterbox);
+    if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+    if(m_dbg) save_det_data_final(dets, nboxes, l.w, l.h, l.n, l.classes);
+
+	draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
+
+    show_image(im, "predictions"); 
+
+    free_image(im);                
+    free_image(sized);             
+
+    cvWaitKey(0);
+    cvDestroyAllWindows();
 }
 
 // get command line parameters and load objects names
 void run_detector(int argc, char **argv)
 {
-    int dont_show = find_arg(argc, argv, "-dont_show");
     float thresh = find_float_arg(argc, argv, "-thresh", .25);
-    
 	if (argc < 4) {
-        fprintf(stderr, "usage: %s %s [test] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
     }
 
-    char *obj_names = argv[3];    // char *datacfg = argv[3];
-    char *cfg = argv[4];
-    char *weights = (argc > 5) ? argv[5] : 0;
-    char *filename = (argc > 6) ? argv[6] : 0;
+    char *obj_names = argv[1];    
+    char *cfg = argv[2];
+
+	char *weights = argv[3];
+	char *filename = argv[4];
 
     // load object names
     char **names = calloc(10000, sizeof(char *));
@@ -237,15 +208,13 @@ void run_detector(int argc, char **argv)
     }
 
     fclose(fp);
-    int classes = obj_count;
 
-    if (0 == strcmp(argv[2], "test")) test_detector_cpu(names, cfg, weights, filename, thresh, dont_show);
+    //if (0 == strcmp(argv[2], "test"))
+	test_detector_cpu(names, cfg, weights, filename, thresh);
     
-    int i;
-    for (i = 0; i < obj_count; ++i) free(names[i]);
+    for (int i = 0; i < obj_count; ++i) free(names[i]);
     free(names);
 }
-
 
 int main(int argc, char **argv)
 {
@@ -255,7 +224,10 @@ int main(int argc, char **argv)
         strip(argv[i]);
     }
 
-	m_dbg = 0;
+	int dbg = find_float_arg(argc, argv, "-dbg", 0);
+
+	//m_dbg = 0;
+	m_dbg = dbg;
 
 	if(m_dbg) {
 		_mkdir("dbg");

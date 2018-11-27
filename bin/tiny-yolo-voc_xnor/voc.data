@@ -1,7 +1,0 @@
-classes= 20
-train  = data/voc/train.txt
-valid  = data/voc/2007_test.txt
-#difficult = data/voc/difficult_2007_test.txt
-names = tiny-yolo-voc_xnor/voc.names
-backup = tiny-yolo-voc_xnor/backup/
-
